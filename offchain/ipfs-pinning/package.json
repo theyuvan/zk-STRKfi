@@ -1,0 +1,13 @@
+{
+  "name": "ipfs-pinning-service",
+  "version": "1.0.0",
+  "description": "IPFS pinning service for encrypted identity data",
+  "main": "pinService.js",
+  "scripts": {
+    "test": "node test_pinning.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  }
+}

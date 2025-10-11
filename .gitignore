@@ -1,0 +1,47 @@
+node_modules/
+.env
+.env.local
+*.log
+logs/
+*.log.*
+
+# Build outputs
+dist/
+build/
+contracts/zk/build/
+contracts/artifacts/
+contracts/cache/
+*.zkey
+*.ptau
+*.r1cs
+*.wasm
+*.sym
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Private keys and secrets
+*.pem
+*.key
+privateKeys/
+
+# Deployment artifacts
+contracts/deploy/*.json
+!contracts/deploy/deploy_*.js

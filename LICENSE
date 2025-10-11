@@ -1,0 +1,107 @@
+MIT License
+
+Copyright (c) 2024 ZK Affordability Loan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## Third-Party Licenses
+
+This project uses the following open-source libraries:
+
+- **StarkNet.js** - Apache 2.0 License
+- **Ethers.js** - MIT License
+- **SnarkJS** - GPL-3.0 License
+- **Circom** - GPL-3.0 License
+- **Express.js** - MIT License
+- **IPFS HTTP Client** - Apache 2.0 or MIT License
+- **Node Forge** - BSD 3-Clause License
+- **Plaid SDK** - MIT License
+
+See individual package licenses for complete terms.
+
+## Important Notices
+
+### Zero-Knowledge Proofs
+
+The ZK proof system in this software relies on cryptographic assumptions. Users should:
+
+1. Perform independent security audits
+2. Verify trusted setup parameters
+3. Test thoroughly before production use
+4. Understand cryptographic limitations
+
+### Smart Contract Risk
+
+Smart contracts are experimental technology. This software:
+
+- May contain undiscovered vulnerabilities
+- Requires professional security audit before mainnet
+- Should be tested extensively on testnets
+- Comes with no warranty or guarantee
+
+### Privacy Notice
+
+While this software implements privacy-preserving techniques:
+
+- Privacy depends on correct implementation
+- Users must protect their private keys
+- Trustees must maintain security standards
+- On-chain data is permanently public
+
+### Regulatory Compliance
+
+Users are responsible for:
+
+- Compliance with local lending regulations
+- KYC/AML requirements in their jurisdiction
+- Tax reporting obligations
+- Consumer protection laws
+
+This software is provided as-is for research and development purposes.
+
+### No Financial Advice
+
+This software and documentation:
+
+- Do not constitute financial advice
+- Are not recommendations to lend or borrow
+- Should not be used for production loans without legal review
+- Are experimental and educational in nature
+
+## Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Users assume all risks associated with using this software including but not limited to:
+- Financial loss
+- Privacy breaches
+- Smart contract vulnerabilities
+- Regulatory non-compliance
+- Technical failures
+
+Before using this software in production:
+1. Obtain professional security audit
+2. Consult legal counsel
+3. Verify regulatory compliance
+4. Test extensively on testnets
+5. Implement proper risk management
+6. Maintain adequate insurance
+7. Establish incident response procedures
