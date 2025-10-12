@@ -1,6 +1,7 @@
 node_modules/
 .env
 .env.local
+.env.example
 *.log
 logs/
 *.log.*
@@ -11,6 +12,7 @@ build/
 contracts/zk/build/
 contracts/artifacts/
 contracts/cache/
+contracts/starknet/target/
 *.zkey
 *.ptau
 *.r1cs
@@ -41,7 +43,62 @@ temp/
 *.pem
 *.key
 privateKeys/
+.deploy_credentials
+*_credentials
+*keystore*.json
+*keystore*.exp
+*account*.json
+
+# StarkNet wallet and deployment files
+.starkli-wallets/
+~/.starkli-wallets/
+deployer.json
+account.json
+keystore.json
+*.keystore
+.starkli/
+starkli-wallets/
+
+# Environment-specific secrets
+STARKNET_PRIVATE_KEY
+STARKNET_ACCOUNT_ADDRESS
+WALLET_PRIVATE_KEY
+DEPLOYER_PRIVATE_KEY
 
 # Deployment artifacts
 contracts/deploy/*.json
 !contracts/deploy/deploy_*.js
+deployed_contracts.json
+deployment_info.json
+deployment_addresses.json
+
+# Test and debug files
+test-contracts.js
+debug-*.js
+*.debug.log
+test-circuit.js
+
+# Documentation with sensitive info (optional - review before adding back)
+# You can remove specific files from this list if they don't contain sensitive data
+*DEPLOYMENT*.md
+*DEPLOY*.md
+FINAL_SUMMARY.md
+FIX_APPLIED.md
+SYSTEM_READY.md
+SETUP_COMPLETE.md
+PROJECT_STATUS.md
+RUNNING_STATUS.md
+CURRENT_STATUS.md
+BUILD_STATUS.md
+
+# Scripts with potential credentials
+setup_credentials.sh
+setup_keystore.*
+create_keystore.*
+deploy_*.sh
+auto_deploy.sh
+make_test_transactions.*
+
+# Deployment batch/PowerShell scripts
+deploy-contracts.bat
+deploy-contracts.ps1

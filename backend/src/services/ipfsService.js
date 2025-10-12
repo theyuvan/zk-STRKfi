@@ -1,29 +1,22 @@
-const { create } = require('ipfs-http-client');
+const axios = require('axios');
+const FormData = require('form-data');
 const forge = require('node-forge');
 const logger = require('../utils/logger');
 
 class IPFSService {
   constructor() {
-    this.client = null;
+    this.pinataApiKey = process.env.IPFS_API_KEY;
+    this.pinataSecretKey = process.env.IPFS_API_SECRET;
+    this.pinataJWT = process.env.IPFS_JWT;
     this.gateway = process.env.IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs/';
+    this.pinataBaseUrl = 'https://api.pinata.cloud';
   }
 
   /**
-   * Initialize IPFS client
+   * Initialize IPFS client (no-op for Pinata HTTP API)
    */
   initialize() {
-    if (!this.client) {
-      this.client = create({
-        host: 'api.pinata.cloud',
-        port: 443,
-        protocol: 'https',
-        headers: {
-          pinata_api_key: process.env.IPFS_API_KEY,
-          pinata_secret_api_key: process.env.IPFS_API_SECRET
-        }
-      });
-      logger.info('IPFS client initialized');
-    }
+    logger.info('IPFS service initialized with Pinata');
   }
 
   /**
@@ -97,21 +90,32 @@ class IPFSService {
   }
 
   /**
-   * Upload encrypted data to IPFS
+   * Upload encrypted data to IPFS via Pinata
    * @param {object} encryptedData - Encrypted data to upload
    * @returns {string} IPFS CID
    */
   async uploadToIPFS(encryptedData) {
     try {
-      this.initialize();
-
-      const buffer = Buffer.from(JSON.stringify(encryptedData));
-      const result = await this.client.add(buffer, {
-        pin: true
+      const data = JSON.stringify({
+        pinataContent: encryptedData,
+        pinataMetadata: {
+          name: `loan-data-${Date.now()}.json`
+        }
       });
 
-      const cid = result.path;
-      logger.info('Uploaded to IPFS', { cid });
+      const response = await axios.post(
+        `${this.pinataBaseUrl}/pinning/pinJSONToIPFS`,
+        data,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.pinataJWT}`
+          }
+        }
+      );
+
+      const cid = response.data.IpfsHash;
+      logger.info('Uploaded to IPFS via Pinata', { cid });
 
       return cid;
     } catch (error) {
@@ -121,23 +125,18 @@ class IPFSService {
   }
 
   /**
-   * Retrieve data from IPFS
+   * Retrieve data from IPFS via Pinata gateway
    * @param {string} cid - IPFS CID
    * @returns {object} Retrieved data
    */
   async retrieveFromIPFS(cid) {
     try {
-      this.initialize();
+      const url = `${this.gateway}${cid}`;
+      const response = await axios.get(url);
 
-      const chunks = [];
-      for await (const chunk of this.client.cat(cid)) {
-        chunks.push(chunk);
-      }
-
-      const data = JSON.parse(Buffer.concat(chunks).toString());
       logger.info('Retrieved from IPFS', { cid });
 
-      return data;
+      return response.data;
     } catch (error) {
       logger.error('IPFS retrieval failed', { cid, error: error.message });
       throw new Error(`IPFS retrieval failed: ${error.message}`);

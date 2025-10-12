@@ -4,14 +4,14 @@
   "description": "Privacy-preserving loan platform with ZK income verification",
   "main": "index.js",
   "scripts": {
-    "install:all": "npm install && cd backend && npm install && cd ../contracts && npm install",
-    "backend": "cd backend && npm start",
-    "backend:dev": "cd backend && npm run dev",
-    "workers": "cd backend && npm run workers",
+    "install:all": "npm install ; cd backend ; npm install ; cd ../contracts ; npm install",
+    "backend": "cd backend ; npm start",
+    "backend:dev": "cd backend ; npm run dev",
+    "workers": "cd backend ; npm run workers",
     "build:circuits": "bash scripts/build_zk.sh",
     "deploy:starknet": "bash scripts/deploy_all.sh starknet",
     "deploy:evm": "bash scripts/deploy_all.sh evm",
-    "test": "cd backend && npm test && cd ../contracts && npm test"
+    "test": "cd backend ; npm test ; cd ../contracts && npm test"
   },
   "keywords": [
     "zkp",

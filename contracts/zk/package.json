@@ -1,0 +1,8 @@
+{
+  "name": "zk-circuits",
+  "version": "1.0.0",
+  "description": "Zero-knowledge circuits for wallet activity verification",
+  "dependencies": {
+    "circomlib": "^2.0.5"
+  }
+}

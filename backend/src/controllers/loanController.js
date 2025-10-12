@@ -1,271 +1,346 @@
-const onchainService = require('../services/onchainService');
-const scheduler = require('../utils/scheduler');
-const walletConnectHelper = require('../utils/walletConnectHelper');
+/**
+ * Loan Controller
+ * Handles loan application, repayment, and status checks
+ */
+
+const loanMonitor = require('../services/loanMonitor');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
 
 /**
- * Controller for loan lifecycle operations
- * All transactions are signed client-side
+ * Apply for a loan
+ * POST /api/loan/apply
  */
-class LoanController {
-  /**
-   * Create a loan request
-   * Returns data for client-side transaction signing
-   */
-  async createRequest(req, res) {
-    try {
-      const { borrowerAddress, amount, threshold, proofHash, commitment } = req.body;
+exports.applyForLoan = async (req, res) => {
+  try {
+    const {
+      borrowerAddress,
+      loanId: providedLoanId,
+      amount,
+      threshold,
+      proofHash,
+      commitment,
+      proof,
+      publicSignals
+    } = req.body;
 
-      if (!borrowerAddress || !amount || !threshold || !proofHash || !commitment) {
-        return res.status(400).json({
-          error: 'Missing required fields: borrowerAddress, amount, threshold, proofHash, commitment'
-        });
-      }
-
-      // Generate message for client to sign
-      const signatureMessage = walletConnectHelper.generateSignatureMessage(
-        'create_loan_request',
-        {
-          borrowerAddress,
-          amount,
-          threshold,
-          proofHash,
-          commitment
-        }
-      );
-
-      logger.info('Loan request prepared for signing', {
-        borrowerAddress,
-        amount
+    // Validation
+    if (!borrowerAddress || !amount || !threshold || !proofHash || !commitment) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
       });
-
-      // Return transaction data for client-side signing
-      res.json({
-        message: 'Loan request prepared. Sign and submit transaction.',
-        signatureMessage,
-        contractAddress: process.env.STARKNET_LOAN_ESCROW_CONTRACT,
-        functionName: 'create_loan_request',
-        calldata: {
-          amount: amount.toString(),
-          threshold: threshold.toString(),
-          proof_hash: proofHash,
-          borrower_commit: commitment
-        }
-      });
-    } catch (error) {
-      logger.error('Create loan request failed', { error: error.message });
-      res.status(500).json({ error: error.message });
     }
-  }
 
-  /**
-   * Fund a loan
-   * Returns data for client-side transaction signing
-   */
-  async fundLoan(req, res) {
-    try {
-      const { loanId, lenderAddress, cid } = req.body;
+    // Generate unique loan ID
+    const loanId = providedLoanId || crypto.randomBytes(16).toString('hex');
 
-      if (!loanId || !lenderAddress || !cid) {
-        return res.status(400).json({
-          error: 'Missing required fields: loanId, lenderAddress, cid'
-        });
-      }
+    // Mock loan provider data (as specified - single loan provider)
+    const loanProvider = {
+      providerAddress: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      name: "DeFi Lender Alpha",
+      loanAmount: "50000000000000000000", // 50 STRK
+      interestRate: 5, // 5%
+      thresholdScore: 500,
+      repaymentPeriod: 600, // 10 minutes (600 seconds)
+      repaymentAmount: "52500000000000000000" // 52.5 STRK
+    };
 
-      // Verify loan exists and is in correct state
-      const loanDetails = await onchainService.getLoanDetails(loanId);
-      
-      if (loanDetails.state !== 'pending') {
-        return res.status(400).json({
-          error: `Loan is not in pending state: ${loanDetails.state}`
-        });
-      }
+    // Calculate deadline (10 minutes from now)
+    const deadline = Date.now() + (loanProvider.repaymentPeriod * 1000);
 
-      // Generate message for client to sign
-      const signatureMessage = walletConnectHelper.generateSignatureMessage(
-        'fund_loan',
-        { loanId, lenderAddress, cid }
-      );
+    // Create loan data
+    const loanData = {
+      loanId,
+      borrowerAddress,
+      lenderAddress: loanProvider.providerAddress,
+      amount: loanProvider.loanAmount,
+      repaymentAmount: loanProvider.repaymentAmount,
+      interestRate: loanProvider.interestRate,
+      deadline,
+      proofHash,
+      commitment,
+      proof,
+      publicSignals,
+      appliedAt: Date.now()
+    };
 
-      logger.info('Loan funding prepared for signing', {
+    // Start monitoring this loan
+    loanMonitor.startMonitoring(loanData);
+
+    logger.info(`✅ Loan application approved`, {
+      loanId,
+      borrower: borrowerAddress,
+      amount: loanProvider.loanAmount,
+      deadline: new Date(deadline).toISOString()
+    });
+
+    res.json({
+      success: true,
+      loanId,
+      loanData: {
         loanId,
-        lenderAddress
-      });
+        amount: loanProvider.loanAmount,
+        repaymentAmount: loanProvider.repaymentAmount,
+        deadline,
+        status: 'active'
+      },
+      message: 'Loan approved successfully'
+    });
 
-      res.json({
-        message: 'Loan funding prepared. Sign and submit transaction.',
-        signatureMessage,
-        contractAddress: process.env.STARKNET_LOAN_ESCROW_CONTRACT,
-        functionName: 'fund_loan',
-        calldata: {
-          loan_id: loanId,
-          cid: cid
-        },
-        loanDetails
-      });
-    } catch (error) {
-      logger.error('Fund loan failed', { error: error.message });
-      res.status(500).json({ error: error.message });
-    }
+  } catch (error) {
+    logger.error('Loan application error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
+};
 
-  /**
-   * Report loan payment
-   * Returns data for client-side transaction signing
-   */
-  async reportPayment(req, res) {
-    try {
-      const { loanId, amount, borrowerAddress } = req.body;
+/**
+ * Repay a loan
+ * POST /api/loan/repay
+ */
+exports.repayLoan = async (req, res) => {
+  try {
+    const { loanId, borrowerAddress, amount } = req.body;
 
-      if (!loanId || !amount || !borrowerAddress) {
-        return res.status(400).json({
-          error: 'Missing required fields: loanId, amount, borrowerAddress'
-        });
-      }
-
-      // Verify loan exists
-      const loanDetails = await onchainService.getLoanDetails(loanId);
-
-      if (loanDetails.state !== 'active') {
-        return res.status(400).json({
-          error: `Loan is not active: ${loanDetails.state}`
-        });
-      }
-
-      // Generate message for client to sign
-      const signatureMessage = walletConnectHelper.generateSignatureMessage(
-        'report_payment',
-        { loanId, amount, borrowerAddress }
-      );
-
-      logger.info('Payment report prepared for signing', {
-        loanId,
-        amount
+    if (!loanId || !borrowerAddress || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: loanId, borrowerAddress, amount'
       });
-
-      res.json({
-        message: 'Payment report prepared. Sign and submit transaction.',
-        signatureMessage,
-        contractAddress: process.env.STARKNET_LOAN_ESCROW_CONTRACT,
-        functionName: 'report_payment',
-        calldata: {
-          loan_id: loanId,
-          amount: amount.toString()
-        }
-      });
-    } catch (error) {
-      logger.error('Report payment failed', { error: error.message });
-      res.status(500).json({ error: error.message });
     }
-  }
 
-  /**
-   * Trigger default on a loan
-   * Starts dispute window
-   */
-  async triggerDefault(req, res) {
-    try {
-      const { loanId, lenderAddress } = req.body;
-
-      if (!loanId || !lenderAddress) {
-        return res.status(400).json({
-          error: 'Missing required fields: loanId, lenderAddress'
-        });
-      }
-
-      // Verify loan exists and can be defaulted
-      const loanDetails = await onchainService.getLoanDetails(loanId);
-
-      if (loanDetails.state !== 'active') {
-        return res.status(400).json({
-          error: `Cannot default loan in state: ${loanDetails.state}`
-        });
-      }
-
-      // Schedule dispute window completion
-      const disputeTaskId = scheduler.scheduleDisputeWindow(loanId, () => {
-        logger.info('Dispute window completed', { loanId });
-        // Trigger identity reveal process
+    // Check if loan exists
+    const loan = loanMonitor.getLoanStatus(loanId);
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        error: 'Loan not found'
       });
-
-      // Generate message for client to sign
-      const signatureMessage = walletConnectHelper.generateSignatureMessage(
-        'trigger_default',
-        { loanId, lenderAddress }
-      );
-
-      logger.info('Default trigger prepared for signing', {
-        loanId,
-        disputeTaskId
-      });
-
-      res.json({
-        message: 'Default trigger prepared. Sign and submit transaction.',
-        signatureMessage,
-        contractAddress: process.env.STARKNET_LOAN_ESCROW_CONTRACT,
-        functionName: 'trigger_default',
-        calldata: {
-          loan_id: loanId
-        },
-        disputeTaskId,
-        disputeWindowSeconds: process.env.DISPUTE_WINDOW_SECONDS
-      });
-    } catch (error) {
-      logger.error('Trigger default failed', { error: error.message });
-      res.status(500).json({ error: error.message });
     }
-  }
 
-  /**
-   * Get loan details
-   */
-  async getLoanDetails(req, res) {
-    try {
-      const { loanId } = req.params;
-
-      if (!loanId) {
-        return res.status(400).json({ error: 'Loan ID required' });
-      }
-
-      const loanDetails = await onchainService.getLoanDetails(loanId);
-
-      logger.info('Loan details retrieved', { loanId });
-
-      res.json({
-        loanId,
-        ...loanDetails
+    // Verify borrower
+    if (loan.borrowerAddress.toLowerCase() !== borrowerAddress.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: Not the borrower of this loan'
       });
-    } catch (error) {
-      logger.error('Get loan details failed', { error: error.message });
-      res.status(500).json({ error: error.message });
     }
-  }
 
-  /**
-   * Get all loans for an address
-   */
-  async getLoansForAddress(req, res) {
-    try {
-      const { address } = req.params;
-
-      if (!address) {
-        return res.status(400).json({ error: 'Address required' });
-      }
-
-      // This would query events or indexed data for loans involving this address
-      const loans = [];
-
-      logger.info('Loans retrieved for address', {
-        address,
-        count: loans.length
+    // Check if already repaid or defaulted
+    if (loan.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: `Loan cannot be repaid (status: ${loan.status})`
       });
-
-      res.json({ address, loans });
-    } catch (error) {
-      logger.error('Get loans for address failed', { error: error.message });
-      res.status(500).json({ error: error.message });
     }
-  }
-}
 
-module.exports = new LoanController();
+    // Verify amount
+    if (amount !== loan.repaymentAmount) {
+      return res.status(400).json({
+        success: false,
+        error: `Incorrect repayment amount. Expected: ${loan.repaymentAmount}, Got: ${amount}`
+      });
+    }
+
+    // Generate mock transaction hash (in production, this would come from blockchain)
+    const mockTxHash = '0x' + crypto.randomBytes(32).toString('hex');
+
+    // Process repayment
+    const repaidLoan = loanMonitor.handleRepayment(loanId, mockTxHash);
+
+    logger.info(`✅ Loan repayment processed`, {
+      loanId,
+      borrower: borrowerAddress,
+      amount,
+      txHash: mockTxHash
+    });
+
+    res.json({
+      success: true,
+      loanId,
+      txHash: mockTxHash,
+      repaidAt: repaidLoan.repaidAt,
+      message: 'Loan repaid successfully'
+    });
+
+  } catch (error) {
+    logger.error('Loan repayment error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get loan status
+ * GET /api/loan/status/:loanId
+ */
+exports.getLoanStatus = async (req, res) => {
+  try {
+    const { loanId } = req.params;
+
+    const loan = loanMonitor.getLoanStatus(loanId);
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        error: 'Loan not found'
+      });
+    }
+
+    const timeRemaining = Math.max(0, loan.deadline - Date.now());
+
+    res.json({
+      success: true,
+      loan: {
+        loanId: loan.loanId,
+        status: loan.status,
+        borrowerAddress: loan.borrowerAddress,
+        lenderAddress: loan.lenderAddress,
+        amount: loan.amount,
+        repaymentAmount: loan.repaymentAmount,
+        deadline: loan.deadline,
+        timeRemaining,
+        appliedAt: loan.appliedAt,
+        repaidAt: loan.repaidAt,
+        defaultedAt: loan.defaultedAt
+      }
+    });
+
+  } catch (error) {
+    logger.error('Get loan status error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Force default a loan (testing/admin only)
+ * POST /api/loan/default/:loanId
+ */
+exports.forceDefault = async (req, res) => {
+  try {
+    const { loanId } = req.params;
+
+    const loan = loanMonitor.getLoanStatus(loanId);
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        error: 'Loan not found'
+      });
+    }
+
+    const defaultedLoan = loanMonitor.forceDefault(loanId);
+
+    logger.info(`⚠️ Loan force-defaulted (admin action)`, {
+      loanId,
+      borrower: defaultedLoan.borrowerAddress
+    });
+
+    res.json({
+      success: true,
+      loanId,
+      message: 'Loan defaulted successfully (identity revealed)',
+      defaultedAt: defaultedLoan.defaultedAt
+    });
+
+  } catch (error) {
+    logger.error('Force default error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get all active loans
+ * GET /api/loan/active
+ */
+exports.getActiveLoans = async (req, res) => {
+  try {
+    const activeLoans = loanMonitor.getActiveLoans();
+
+    res.json({
+      success: true,
+      count: activeLoans.length,
+      loans: activeLoans.map(loan => ({
+        loanId: loan.loanId,
+        borrowerAddress: loan.borrowerAddress,
+        amount: loan.amount,
+        repaymentAmount: loan.repaymentAmount,
+        deadline: loan.deadline,
+        timeRemaining: Math.max(0, loan.deadline - Date.now())
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Get active loans error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get loans by borrower
+ * GET /api/loan/borrower/:address
+ */
+exports.getLoansByBorrower = async (req, res) => {
+  try {
+    const { address } = req.params;
+
+    const loans = loanMonitor.getLoansByBorrower(address);
+
+    res.json({
+      success: true,
+      count: loans.length,
+      loans: loans.map(loan => ({
+        loanId: loan.loanId,
+        status: loan.status,
+        amount: loan.amount,
+        repaymentAmount: loan.repaymentAmount,
+        deadline: loan.deadline,
+        timeRemaining: Math.max(0, loan.deadline - Date.now()),
+        appliedAt: loan.appliedAt
+      }))
+    });
+
+  } catch (error) {
+    logger.error('Get loans by borrower error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get monitoring stats (admin/debug)
+ * GET /api/loan/stats
+ */
+exports.getStats = async (req, res) => {
+  try {
+    const stats = loanMonitor.getStats();
+
+    res.json({
+      success: true,
+      stats
+    });
+
+  } catch (error) {
+    logger.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};

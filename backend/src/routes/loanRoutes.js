@@ -2,22 +2,26 @@ const express = require('express');
 const router = express.Router();
 const loanController = require('../controllers/loanController');
 
-// Create loan request
-router.post('/create-request', loanController.createRequest.bind(loanController));
+// Apply for a loan
+router.post('/apply', loanController.applyForLoan);
 
-// Fund a loan
-router.post('/fund', loanController.fundLoan.bind(loanController));
+// Repay a loan
+router.post('/repay', loanController.repayLoan);
 
-// Report payment
-router.post('/report-payment', loanController.reportPayment.bind(loanController));
+// Get loan status
+router.get('/status/:loanId', loanController.getLoanStatus);
 
-// Trigger default
-router.post('/trigger-default', loanController.triggerDefault.bind(loanController));
+// Force default (testing/admin)
+router.post('/default/:loanId', loanController.forceDefault);
 
-// Get loan details
-router.get('/:loanId', loanController.getLoanDetails.bind(loanController));
+// Get all active loans
+router.get('/active', loanController.getActiveLoans);
 
-// Get loans for address
-router.get('/address/:address', loanController.getLoansForAddress.bind(loanController));
+// Get loans by borrower
+router.get('/borrower/:address', loanController.getLoansByBorrower);
+
+// Get monitoring stats
+router.get('/stats', loanController.getStats);
 
 module.exports = router;
+

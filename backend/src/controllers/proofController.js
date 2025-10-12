@@ -61,13 +61,22 @@ class ProofController {
    */
   async generateProof(req, res) {
     try {
-      const { salary, threshold, salt } = req.body;
+      let { salary, threshold, salt } = req.body;
 
-      if (!salary || !threshold || !salt) {
+      if (!salary || !threshold) {
         return res.status(400).json({
-          error: 'Missing required fields: salary, threshold, salt'
+          error: 'Missing required fields: salary, threshold'
         });
       }
+
+      // Generate salt if not provided
+      if (!salt) {
+        salt = crypto.randomBytes(32).toString('hex');
+        logger.info('Generated salt for proof', { hasSalt: true });
+      }
+
+      // Generate commitment
+      const commitment = await zkService.generateCommitment(salary, salt);
 
       // Prepare inputs
       const inputs = zkService.prepareIncomeProofInputs(salary, threshold, salt);
@@ -75,19 +84,28 @@ class ProofController {
       // Generate proof
       const { proof, publicSignals } = await zkService.generateProof(inputs);
 
+      // Generate proof hash for on-chain storage
+      const proofHash = crypto.createHash('sha256')
+        .update(JSON.stringify(proof))
+        .digest('hex');
+
       // Format for contract submission
       const formattedProof = zkService.exportProofForContract(proof, publicSignals);
 
       logger.info('ZK proof generated', {
         threshold,
-        publicSignalsCount: publicSignals.length
+        publicSignalsCount: publicSignals.length,
+        proofHash: proofHash.substring(0, 16) + '...'
       });
 
       res.json({
         message: 'Proof generated successfully',
         proof: formattedProof,
         publicSignals,
-        rawProof: proof
+        rawProof: proof,
+        commitment,
+        proofHash,
+        salt
       });
     } catch (error) {
       logger.error('Generate proof failed', { error: error.message });

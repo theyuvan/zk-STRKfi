@@ -12,7 +12,7 @@ const api = axios.create({
 // Proof API
 export const proofApi = {
   prepareProofInputs: async (salary, threshold) => {
-    const response = await api.post('/api/proof/prepare', { salary, threshold });
+    const response = await api.post('/api/proof/prepare-inputs', { salary, threshold });
     return response.data;
   },
   
