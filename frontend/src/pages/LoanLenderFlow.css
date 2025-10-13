@@ -546,3 +546,134 @@
     flex-direction: column;
   }
 }
+
+/* ⏰ Countdown Timer Styles (same as borrower) */
+.countdown-timer {
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 8px;
+  text-align: center;
+  border: 2px solid;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.countdown-text {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.countdown-details {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+/* Countdown urgency states */
+.countdown-safe {
+  background: rgba(0, 255, 136, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.countdown-warning {
+  background: rgba(255, 170, 0, 0.1);
+  border-color: var(--warning);
+  color: var(--warning);
+  animation: pulse-warning 2s infinite;
+}
+
+.countdown-critical {
+  background: rgba(255, 68, 68, 0.1);
+  border-color: var(--error);
+  color: var(--error);
+  animation: pulse-critical 1s infinite;
+}
+
+.countdown-expired {
+  background: rgba(255, 68, 68, 0.2);
+  border-color: var(--error);
+  color: var(--error);
+  font-weight: bold;
+  animation: pulse-critical 1s infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes pulse-critical {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+/* 📊 Status Filter Tabs */
+.status-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  padding: 0.5rem;
+  background: rgba(10, 25, 41, 0.5);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.filter-tab {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem 1rem;
+  background: rgba(26, 35, 50, 0.6);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.filter-tab:hover {
+  background: rgba(0, 217, 255, 0.1);
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
+}
+
+.filter-tab.active {
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-cyan-light));
+  border-color: var(--accent-cyan);
+  color: var(--primary-blue);
+  box-shadow: 0 4px 12px rgba(0, 217, 255, 0.4);
+}
+
+/* 🚨 Overdue Warning */
+.application-card.overdue {
+  border: 2px solid var(--error);
+  background: rgba(255, 68, 68, 0.05);
+}
+
+.overdue-warning {
+  padding: 1rem;
+  background: rgba(255, 68, 68, 0.1);
+  border: 2px solid var(--error);
+  border-radius: 8px;
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.overdue-warning p {
+  margin-bottom: 0.75rem;
+  color: var(--error);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ff4444, #ff6666);
+  color: white;
+  font-weight: 600;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #ff6666, #ff8888);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 68, 68, 0.5);
+}
+

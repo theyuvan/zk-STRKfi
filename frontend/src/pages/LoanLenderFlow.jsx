@@ -13,6 +13,74 @@ const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS ||
 const STRK_TOKEN_ADDRESS = import.meta.env.VITE_STRK_TOKEN_ADDRESS || 
   '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 
+// ⏰ Countdown Timer Component (reused from borrower)
+const RepaymentCountdown = ({ deadline }) => {
+  const [timeRemaining, setTimeRemaining] = useState(null);
+
+  const calculateTimeRemaining = (deadlineISO) => {
+    const now = Date.now();
+    const deadlineMs = new Date(deadlineISO).getTime();
+    const remaining = deadlineMs - now;
+
+    if (remaining <= 0) {
+      const overdueDuration = Math.abs(remaining);
+      const days = Math.floor(overdueDuration / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((overdueDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      return {
+        expired: true,
+        text: `⚠️ OVERDUE: ${days}d ${hours}h past deadline`,
+        class: 'countdown-expired'
+      };
+    }
+
+    const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+
+    let urgencyClass = 'countdown-safe';
+    if (days === 0 && hours < 6) {
+      urgencyClass = 'countdown-critical';
+    } else if (days < 2) {
+      urgencyClass = 'countdown-warning';
+    }
+
+    return {
+      expired: false,
+      text: `⏳ ${days}d ${hours}h ${minutes}m remaining`,
+      class: urgencyClass,
+      days,
+      hours,
+      minutes
+    };
+  };
+
+  useEffect(() => {
+    // Initial calculation
+    setTimeRemaining(calculateTimeRemaining(deadline));
+
+    // Update every minute
+    const timer = setInterval(() => {
+      setTimeRemaining(calculateTimeRemaining(deadline));
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [deadline]);
+
+  if (!timeRemaining) return null;
+
+  return (
+    <div className={`countdown-timer ${timeRemaining.class}`}>
+      <div className="countdown-text">{timeRemaining.text}</div>
+      {!timeRemaining.expired && (
+        <div className="countdown-details">
+          <small>Deadline: {new Date(deadline).toLocaleString()}</small>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LoanLenderFlow = () => {
   // Authentication state
   const [passwordEntered, setPasswordEntered] = useState(false);
@@ -43,6 +111,7 @@ const LoanLenderFlow = () => {
   const [myLoans, setMyLoans] = useState([]);
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [applications, setApplications] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'pending', 'approved', 'repaid'
 
   const starknetService = new StarkNetService();
 
@@ -392,6 +461,112 @@ const LoanLenderFlow = () => {
     }
   };
 
+  // Reveal borrower identity (for overdue loans)
+  const revealBorrowerIdentity = async (loanId, borrowerCommitment) => {
+    try {
+      console.log('🔓 Revealing borrower identity for overdue loan:', loanId);
+      
+      // Get connected wallet
+      const starknet = await connect();
+      if (!starknet || !starknet.account) {
+        throw new Error('Wallet not connected');
+      }
+
+      const provider = new RpcProvider({ 
+        nodeUrl: import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.public.blastapi.io'
+      });
+
+      const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS || 
+        '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+
+      // First, check the application status from backend to confirm it's overdue
+      const appResponse = await axios.get(
+        `http://localhost:3000/api/loan/application/${loanId}/${borrowerCommitment}`
+      );
+      
+      const app = appResponse.data;
+      if (!app) {
+        throw new Error('Application not found');
+      }
+
+      if (app.status !== 'approved') {
+        throw new Error('Loan must be approved to reveal identity');
+      }
+
+      const deadline = new Date(app.repaymentDeadline);
+      const now = new Date();
+      
+      if (now <= deadline) {
+        throw new Error('Loan is not overdue yet. Cannot reveal identity.');
+      }
+
+      const daysOverdue = Math.floor((now - deadline) / (1000 * 60 * 60 * 24));
+
+      // Convert loan_id to u256
+      const loanIdU256 = uint256.bnToUint256(BigInt(loanId));
+
+      // Clean and convert commitment to felt252
+      const cleanHex = (hexStr) => {
+        if (!hexStr) return '0';
+        const cleaned = hexStr.startsWith?.('0x') ? hexStr.slice(2) : hexStr;
+        return cleaned.slice(0, 63); // Truncate to 63 chars (252 bits)
+      };
+
+      const commitmentHex = cleanHex(borrowerCommitment);
+      let commitmentNum = BigInt('0x' + commitmentHex);
+      
+      // Mask to fit in felt252
+      const FELT252_MAX = (BigInt(2) ** BigInt(251)) - BigInt(1);
+      if (commitmentNum > FELT252_MAX) {
+        commitmentNum = commitmentNum & FELT252_MAX;
+      }
+
+      console.log('🔓 Calling reveal_borrower_identity on contract...');
+      console.log('  Loan ID:', loanId);
+      console.log('  Commitment:', borrowerCommitment);
+      console.log('  Days Overdue:', daysOverdue);
+
+      // Call reveal_borrower_identity on-chain
+      const revealTx = await starknet.account.execute({
+        contractAddress: LOAN_ESCROW_ADDRESS,
+        entrypoint: 'reveal_borrower_identity',
+        calldata: [
+          loanIdU256.low.toString(),
+          loanIdU256.high.toString(),
+          commitmentNum.toString()
+        ]
+      });
+      
+      console.log('⏳ Waiting for reveal tx:', revealTx.transaction_hash);
+      await provider.waitForTransaction(revealTx.transaction_hash);
+      console.log('✅ Identity revealed on blockchain!');
+
+      // Get the revealed identity from the backend (which reads from contract)
+      const revealResponse = await axios.get(
+        `http://localhost:3000/api/loan/${loanId}/reveal/${borrowerCommitment}`
+      );
+      
+      const borrowerAddress = revealResponse.data.borrower || app.borrower || 'Unknown';
+
+      alert(
+        `🔓 Borrower Identity Revealed!\n\n` +
+        `Wallet Address: ${borrowerAddress}\n` +
+        `Loan ID: ${loanId}\n` +
+        `Overdue by: ${daysOverdue} days\n` +
+        `Transaction: ${revealTx.transaction_hash.slice(0, 10)}...\n\n` +
+        `⚠️ The borrower failed to repay within the deadline.\n` +
+        `✅ Identity revealed on-chain via smart contract.`
+      );
+
+      // Reload applications to update UI
+      await loadApplications(loanId);
+      
+    } catch (error) {
+      console.error('❌ Failed to reveal identity:', error);
+      alert('Failed to reveal borrower identity: ' + (error.message || error));
+    }
+  };
+
   // Auto-fetch activity when wallet connected
   useEffect(() => {
     if (walletConnected && walletAddress && !activityData) {
@@ -676,36 +851,101 @@ const LoanLenderFlow = () => {
           <div className="applications-section">
             <h2>📬 Applications for Loan #{selectedLoan}</h2>
             
+            {/* Status Filter Tabs */}
+            <div className="status-filters">
+              <button 
+                className={`filter-tab ${statusFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('all')}
+              >
+                📋 All ({applications.length})
+              </button>
+              <button 
+                className={`filter-tab ${statusFilter === 'pending' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('pending')}
+              >
+                ⏳ Pending ({applications.filter(a => a.status === 'pending').length})
+              </button>
+              <button 
+                className={`filter-tab ${statusFilter === 'approved' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('approved')}
+              >
+                ✅ Approved ({applications.filter(a => a.status === 'approved').length})
+              </button>
+              <button 
+                className={`filter-tab ${statusFilter === 'repaid' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('repaid')}
+              >
+                💰 Repaid ({applications.filter(a => a.status === 'repaid').length})
+              </button>
+            </div>
+            
             {applications.length === 0 ? (
               <p className="empty-state">No applications yet</p>
             ) : (
               <div className="applications-list">
-                {applications.map((app, idx) => (
-                  <div key={idx} className="application-card">
-                    <div className="app-header">
-                      <span className="commitment-hash">
-                        🔒 {app.borrowerCommitment.slice(0, 10)}...{app.borrowerCommitment.slice(-8)}
-                      </span>
-                      <span className={`status-badge ${app.status}`}>
-                        {app.status}
-                      </span>
-                    </div>
+                {applications
+                  .filter(app => statusFilter === 'all' || app.status === statusFilter)
+                  .map((app, idx) => {
+                    const isOverdue = app.status === 'approved' && 
+                                      app.repaymentDeadline && 
+                                      new Date(app.repaymentDeadline) < new Date();
                     
-                    <div className="app-details">
-                      <p>📊 Activity Score: <strong>{app.activityScore || 'Verified ✅'}</strong></p>
-                      <p>📅 Applied: {new Date(app.timestamp).toLocaleString()}</p>
-                    </div>
+                    return (
+                      <div key={idx} className={`application-card ${isOverdue ? 'overdue' : ''}`}>
+                        <div className="app-header">
+                          <span className="commitment-hash">
+                            🔒 {app.borrowerCommitment.slice(0, 10)}...{app.borrowerCommitment.slice(-8)}
+                          </span>
+                          <span className={`status-badge ${app.status}`}>
+                            {app.status === 'pending' && '⏳ PENDING'}
+                            {app.status === 'approved' && (isOverdue ? '⚠️ OVERDUE' : '✅ APPROVED')}
+                            {app.status === 'repaid' && '💰 REPAID'}
+                          </span>
+                        </div>
+                        
+                        <div className="app-details">
+                          <p>📊 Activity Score: <strong>{app.activityScore || 'Verified ✅'}</strong></p>
+                          <p>📅 Applied: {new Date(app.timestamp).toLocaleString()}</p>
+                          
+                          {app.status === 'approved' && app.approvedAt && (
+                            <p>✅ Approved: {new Date(app.approvedAt).toLocaleString()}</p>
+                          )}
+                          
+                          {app.status === 'repaid' && app.repaidAt && (
+                            <p>💰 Repaid: {new Date(app.repaidAt).toLocaleString()}</p>
+                          )}
+                        </div>
 
-                    {app.status === 'pending' && (
-                      <button
-                        onClick={() => approveBorrower(selectedLoan, app.borrowerCommitment)}
-                        className="btn-primary btn-block"
-                      >
-                        ✅ Approve & Release Funds
-                      </button>
-                    )}
-                  </div>
-                ))}
+                        {/* Show countdown timer for approved loans */}
+                        {app.status === 'approved' && app.repaymentDeadline && (
+                          <RepaymentCountdown deadline={app.repaymentDeadline} />
+                        )}
+
+                        {/* Action buttons based on status */}
+                        {app.status === 'pending' && (
+                          <button
+                            onClick={() => approveBorrower(selectedLoan, app.borrowerCommitment)}
+                            className="btn-primary btn-block"
+                          >
+                            ✅ Approve & Release Funds
+                          </button>
+                        )}
+
+                        {isOverdue && (
+                          <div className="overdue-warning">
+                            <p>⚠️ <strong>Loan is overdue!</strong></p>
+                            <button
+                              onClick={() => revealBorrowerIdentity(selectedLoan, app.borrowerCommitment)}
+                              className="btn-danger btn-block"
+                            >
+                              🔓 Reveal Borrower Identity
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                }
               </div>
             )}
           </div>

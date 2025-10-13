@@ -323,8 +323,26 @@ router.get('/application/:loanId/:commitment', async (req, res) => {
     
     logger.info('📬 Fetching application', { loanId, commitment: commitment.slice(0, 20) + '...' });
 
-    const escrowContract = new Contract(ESCROW_ABI, LOAN_ESCROW_ZK_ADDRESS, provider);
-    const application = await escrowContract.get_application(loanId, commitment);
+    // Convert loanId to u256 format
+    const { low: loanLow, high: loanHigh } = uint256.bnToUint256(BigInt(loanId));
+
+    // Use raw callContract to have full control over parameter formatting
+    const appRawResult = await provider.callContract({
+      contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+      entrypoint: 'get_application',
+      calldata: [loanLow, loanHigh, commitment]
+    });
+
+    const application = {
+      borrower: appRawResult.result[0],
+      commitment: appRawResult.result[1],
+      proof_hash: appRawResult.result[2],
+      status: Number(appRawResult.result[3]),
+      applied_at: Number(appRawResult.result[4]),
+      approved_at: Number(appRawResult.result[5]),
+      repaid_at: Number(appRawResult.result[6]),
+      repayment_deadline: Number(appRawResult.result[7])
+    };
 
     if (application.borrower === '0x0' || !application.borrower) {
       return res.status(404).json({ error: 'Application not found' });
@@ -336,10 +354,10 @@ router.get('/application/:loanId/:commitment', async (req, res) => {
       commitment: application.commitment,
       proofHash: application.proof_hash,
       status: application.status === 0 ? 'pending' : application.status === 1 ? 'approved' : 'repaid',
-      appliedAt: new Date(Number(application.applied_at) * 1000).toISOString(),
-      approvedAt: application.approved_at > 0 ? new Date(Number(application.approved_at) * 1000).toISOString() : null,
-      repaidAt: application.repaid_at > 0 ? new Date(Number(application.repaid_at) * 1000).toISOString() : null,
-      repaymentDeadline: application.repayment_deadline > 0 ? new Date(Number(application.repayment_deadline) * 1000).toISOString() : null
+      appliedAt: new Date(application.applied_at * 1000).toISOString(),
+      approvedAt: application.approved_at > 0 ? new Date(application.approved_at * 1000).toISOString() : null,
+      repaidAt: application.repaid_at > 0 ? new Date(application.repaid_at * 1000).toISOString() : null,
+      repaymentDeadline: application.repayment_deadline > 0 ? new Date(application.repayment_deadline * 1000).toISOString() : null
     };
 
     logger.info('✅ Application found:', result.status);
@@ -462,10 +480,10 @@ router.get('/:loanId/applications', async (req, res) => {
               });
             }
           } catch (err) {
-            // Ignore errors for commitments that don't have applications to this loan
+            
           }
       }
-      // No else block needed here; remove to fix syntax error.
+      
     }
 
     logger.info(`✅ Found ${applications.length} applications for loan ${loanId}`);
@@ -557,7 +575,8 @@ router.get('/borrower/:commitment/applications', async (req, res) => {
             status: Number(appRawResult.result[3]),
             applied_at: Number(appRawResult.result[4]),
             approved_at: Number(appRawResult.result[5]),
-            repayment_deadline: Number(appRawResult.result[6])
+            repaid_at: Number(appRawResult.result[6]),
+            repayment_deadline: Number(appRawResult.result[7])
           };
           
           // Log for loan 3 (the one you applied to) to see what the contract returns
@@ -751,13 +770,16 @@ router.get('/borrower/:commitment/active', async (req, res) => {
         });
         
         // Parse Application struct
+        // Application { borrower, commitment, proof_hash, status, applied_at, approved_at, repaid_at, repayment_deadline }
         const application = {
           borrower: appRawResult.result[0],
+          commitment: appRawResult.result[1],
+          proof_hash: appRawResult.result[2],
           status: Number(appRawResult.result[3]),
           applied_at: Number(appRawResult.result[4]),
           approved_at: Number(appRawResult.result[5]),
-          repayment_deadline: Number(appRawResult.result[6]),
-          commitment: appRawResult.result[1]
+          repaid_at: Number(appRawResult.result[6]),
+          repayment_deadline: Number(appRawResult.result[7])
         };
         
         // Only include approved loans (status = 1)
@@ -792,7 +814,7 @@ router.get('/borrower/:commitment/active', async (req, res) => {
     }
 
     logger.info(`✅ Found ${activeLoans.length} active loans`);
-    res.json(activeLoans);
+    res.json({ loans: activeLoans, count: activeLoans.length });
   } catch (error) {
     logger.error('❌ Error fetching active loans:', error);
     res.status(500).json({ error: error.message });
@@ -819,6 +841,97 @@ router.get('/proof/:proofHash/verify', async (req, res) => {
   } catch (error) {
     logger.error('❌ Error checking proof:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Reveal borrower identity (only if loan is overdue)
+ * GET /api/loan/:loanId/reveal/:commitment
+ */
+router.get('/:loanId/reveal/:commitment', async (req, res) => {
+  try {
+    const { loanId, commitment } = req.params;
+    
+    logger.info(`🔓 [REVEAL] Attempting to reveal borrower for loan ${loanId}...`);
+    
+    const { low: loanLow, high: loanHigh } = uint256.bnToUint256(BigInt(loanId));
+    
+    // Get application details
+    const appRawResult = await provider.callContract({
+      contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+      entrypoint: 'get_application',
+      calldata: [loanLow, loanHigh, commitment]
+    });
+    
+    const application = {
+      borrower: appRawResult.result[0],
+      commitment: appRawResult.result[1],
+      proof_hash: appRawResult.result[2],
+      status: Number(appRawResult.result[3]),
+      applied_at: Number(appRawResult.result[4]),
+      approved_at: Number(appRawResult.result[5]),
+      repaid_at: Number(appRawResult.result[6]),
+      repayment_deadline: Number(appRawResult.result[7])
+    };
+    
+    // Check if application exists
+    if (application.borrower === '0x0') {
+      return res.status(404).json({
+        success: false,
+        canReveal: false,
+        message: 'Application not found for this loan and commitment.'
+      });
+    }
+    
+    // Check if loan is approved
+    if (application.status !== 1) {
+      return res.status(403).json({
+        success: false,
+        canReveal: false,
+        message: 'Loan is not in approved status. Cannot reveal borrower identity.',
+        status: application.status
+      });
+    }
+    
+    // Check if overdue
+    const now = Math.floor(Date.now() / 1000);
+    const isOverdue = now > application.repayment_deadline;
+    
+    if (!isOverdue) {
+      const timeRemaining = application.repayment_deadline - now;
+      return res.status(403).json({
+        success: false,
+        canReveal: false,
+        message: 'Loan is not overdue yet. Cannot reveal borrower identity.',
+        deadline: new Date(application.repayment_deadline * 1000).toISOString(),
+        timeRemaining,
+        timeRemainingHours: Math.floor(timeRemaining / 3600)
+      });
+    }
+    
+    // If overdue, return borrower address
+    logger.info(`✅ [REVEAL] Loan is overdue. Revealing borrower: ${application.borrower}`);
+    
+    res.json({
+      success: true,
+      canReveal: true,
+      revealed: true,
+      borrower: application.borrower,
+      commitment,
+      loanId,
+      overdueBy: now - application.repayment_deadline,
+      overdueDays: Math.floor((now - application.repayment_deadline) / 86400),
+      approvedAt: new Date(application.approved_at * 1000).toISOString(),
+      repaymentDeadline: new Date(application.repayment_deadline * 1000).toISOString(),
+      message: 'Borrower identity revealed due to loan default'
+    });
+    
+  } catch (error) {
+    logger.error('❌ [REVEAL] Error revealing borrower:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 

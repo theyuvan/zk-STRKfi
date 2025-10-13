@@ -58,10 +58,17 @@ pub trait ILoanEscrowZK<TContractState> {
     );
     
     // Borrower repays loan
-    fn repay_loan(ref self: TContractState, loan_id: u256);
+    fn repay_loan(ref self: TContractState, loan_id: u256, borrower_commitment: felt252);
     
     // Lender cancels loan offer
     fn cancel_loan_offer(ref self: TContractState, loan_id: u256);
+    
+    // Lender reveals borrower identity if overdue
+    fn reveal_borrower_identity(
+        ref self: TContractState,
+        loan_id: u256,
+        borrower_commitment: felt252,
+    );
     
     // Get loan details
     fn get_loan_details(self: @TContractState, loan_id: u256) -> LoanOffer;
@@ -155,6 +162,7 @@ mod LoanEscrowZK {
         BorrowerApproved: BorrowerApproved,
         LoanRepaid: LoanRepaid,
         LoanOfferCancelled: LoanOfferCancelled,
+        IdentityRevealed: IdentityRevealed,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -193,9 +201,9 @@ mod LoanEscrowZK {
         #[key]
         loan_id: u256,
         #[key]
-        commitment: felt252,
         borrower: ContractAddress,
         amount: u256,
+        repaid_at: u64,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -203,6 +211,18 @@ mod LoanEscrowZK {
         #[key]
         loan_id: u256,
         lender: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct IdentityRevealed {
+        #[key]
+        loan_id: u256,
+        #[key]
+        commitment: felt252,
+        borrower: ContractAddress,
+        lender: ContractAddress,
+        amount_due: u256,
+        days_overdue: u64,
     }
 
     #[constructor]
@@ -368,18 +388,47 @@ mod LoanEscrowZK {
         }
 
         /// Borrower repays loan
-        fn repay_loan(ref self: ContractState, loan_id: u256) {
+        fn repay_loan(ref self: ContractState, loan_id: u256, borrower_commitment: felt252) {
             let caller = get_caller_address();
             let timestamp = get_block_timestamp();
             
-            // Find borrower's application by iterating (in production, use better indexing)
-            // For now, we assume borrower knows their commitment
-            // This is a simplified version - you'd pass commitment as parameter
+            // Read the loan details
+            let mut loan = self.loan_offers.read(loan_id);
+            assert(loan.status == 0, 'Loan not active');
             
-            // TODO: Add commitment parameter to repay_loan
-            // For now, this is a placeholder
+            // Read the borrower's application
+            let mut application = self.applications.read((loan_id, borrower_commitment));
+            assert(application.status == 1, 'Application not approved'); // 1 = approved
+            assert(application.borrower == caller, 'Not the borrower');
             
-            assert(false, 'Use repay_loan_with_commitment');
+            // Transfer repayment amount from borrower to lender
+            let token_dispatcher = IERC20Dispatcher { contract_address: self.strk_token.read() };
+            let repayment_amount = loan.amount_per_borrower; // In real case, might include interest
+            
+            // Transfer tokens from borrower to lender
+            let transfer_success = token_dispatcher.transfer_from(
+                caller,
+                loan.lender,
+                repayment_amount
+            );
+            assert(transfer_success, 'Transfer failed');
+            
+            // Update application status to repaid
+            application.status = 2; // 2 = repaid
+            application.repaid_at = timestamp;
+            self.applications.write((loan_id, borrower_commitment), application);
+            
+            // Update loan filled_slots
+            loan.filled_slots -= 1;
+            self.loan_offers.write(loan_id, loan);
+            
+            // Emit event
+            self.emit(LoanRepaid {
+                loan_id,
+                borrower: caller,
+                amount: repayment_amount,
+                repaid_at: timestamp,
+            });
         }
 
         fn cancel_loan_offer(ref self: ContractState, loan_id: u256) {
@@ -396,6 +445,45 @@ mod LoanEscrowZK {
             self.emit(LoanOfferCancelled {
                 loan_id,
                 lender: caller,
+            });
+        }
+
+        /// Lender reveals borrower identity if loan is overdue
+        fn reveal_borrower_identity(
+            ref self: ContractState,
+            loan_id: u256,
+            borrower_commitment: felt252,
+        ) {
+            let caller = get_caller_address();
+            let timestamp = get_block_timestamp();
+            let loan = self.loan_offers.read(loan_id);
+            let app = self.applications.read((loan_id, borrower_commitment));
+
+            // Only lender can reveal identity
+            assert(caller == loan.lender, 'Only lender can reveal');
+            
+            // Application must be approved (status = 1)
+            assert(app.status == 1, 'Loan not approved');
+            
+            // Check if loan is overdue
+            assert(timestamp > app.repayment_deadline, 'Loan not overdue yet');
+            
+            // Calculate amount due
+            let interest = (loan.amount_per_borrower * loan.interest_rate_bps) / 10000;
+            let amount_due = loan.amount_per_borrower + interest;
+            
+            // Calculate days overdue
+            let overdue_seconds = timestamp - app.repayment_deadline;
+            let days_overdue = overdue_seconds / 86400; // seconds in a day
+            
+            // Emit event with revealed identity
+            self.emit(IdentityRevealed {
+                loan_id,
+                commitment: borrower_commitment,
+                borrower: app.borrower,
+                lender: caller,
+                amount_due,
+                days_overdue,
             });
         }
 
@@ -436,50 +524,6 @@ mod LoanEscrowZK {
 
         fn get_loan_count(self: @ContractState) -> u256 {
             self.loan_counter.read()
-        }
-    }
-
-    // Helper function for repayment with commitment
-    #[generate_trait]
-    impl InternalFunctions of InternalFunctionsTrait {
-        fn repay_with_commitment(
-            ref self: ContractState,
-            loan_id: u256,
-            commitment: felt252
-        ) {
-            let caller = get_caller_address();
-            let timestamp = get_block_timestamp();
-            let loan = self.loan_offers.read(loan_id);
-            let mut app = self.applications.read((loan_id, commitment));
-
-            assert(caller == app.borrower, 'Only borrower can repay');
-            assert(app.status == 1, 'Loan not approved');
-            assert(timestamp <= app.repayment_deadline, 'Past deadline');
-
-            // Calculate repayment
-            let interest = (loan.amount_per_borrower * loan.interest_rate_bps) / 10000;
-            let repayment_amount = loan.amount_per_borrower + interest;
-
-            // Update application
-            app.status = 2; // repaid
-            app.repaid_at = timestamp;
-            self.applications.write((loan_id, commitment), app);
-
-            // Transfer repayment from borrower to lender
-            let strk_token = IERC20Dispatcher { contract_address: self.strk_token.read() };
-            let success = strk_token.transfer_from(
-                caller,
-                loan.lender,
-                repayment_amount
-            );
-            assert(success, 'Repayment transfer failed');
-
-            self.emit(LoanRepaid {
-                loan_id,
-                commitment,
-                borrower: caller,
-                amount: repayment_amount,
-            });
         }
     }
 }

@@ -561,3 +561,64 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-cyan-light);
 }
+
+/* ⏰ Countdown Timer Styles */
+.countdown-timer {
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 8px;
+  text-align: center;
+  border: 2px solid;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.countdown-text {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.countdown-details {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+/* Countdown urgency states */
+.countdown-safe {
+  background: rgba(0, 255, 136, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.countdown-warning {
+  background: rgba(255, 170, 0, 0.1);
+  border-color: var(--warning);
+  color: var(--warning);
+  animation: pulse-warning 2s infinite;
+}
+
+.countdown-critical {
+  background: rgba(255, 68, 68, 0.1);
+  border-color: var(--error);
+  color: var(--error);
+  animation: pulse-critical 1s infinite;
+}
+
+.countdown-expired {
+  background: rgba(255, 68, 68, 0.2);
+  border-color: var(--error);
+  color: var(--error);
+  font-weight: bold;
+  animation: pulse-critical 1s infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes pulse-critical {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+

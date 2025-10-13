@@ -12,6 +12,74 @@ const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS ||
 const STRK_TOKEN_ADDRESS = import.meta.env.VITE_STRK_TOKEN_ADDRESS || 
   '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 
+// ⏰ Countdown Timer Component
+const RepaymentCountdown = ({ deadline }) => {
+  const [timeRemaining, setTimeRemaining] = useState(null);
+
+  const calculateTimeRemaining = (deadlineISO) => {
+    const now = Date.now();
+    const deadlineMs = new Date(deadlineISO).getTime();
+    const remaining = deadlineMs - now;
+
+    if (remaining <= 0) {
+      const overdueDuration = Math.abs(remaining);
+      const days = Math.floor(overdueDuration / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((overdueDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      return {
+        expired: true,
+        text: `⚠️ OVERDUE: ${days}d ${hours}h past deadline`,
+        class: 'countdown-expired'
+      };
+    }
+
+    const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+
+    let urgencyClass = 'countdown-safe';
+    if (days === 0 && hours < 6) {
+      urgencyClass = 'countdown-critical';
+    } else if (days < 2) {
+      urgencyClass = 'countdown-warning';
+    }
+
+    return {
+      expired: false,
+      text: `⏳ ${days}d ${hours}h ${minutes}m remaining`,
+      class: urgencyClass,
+      days,
+      hours,
+      minutes
+    };
+  };
+
+  useEffect(() => {
+    // Initial calculation
+    setTimeRemaining(calculateTimeRemaining(deadline));
+
+    // Update every minute
+    const timer = setInterval(() => {
+      setTimeRemaining(calculateTimeRemaining(deadline));
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [deadline]);
+
+  if (!timeRemaining) return null;
+
+  return (
+    <div className={`countdown-timer ${timeRemaining.class}`}>
+      <div className="countdown-text">{timeRemaining.text}</div>
+      {!timeRemaining.expired && (
+        <div className="countdown-details">
+          <small>Deadline: {new Date(deadline).toLocaleString()}</small>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LoanBorrowerFlow = () => {
   // Wallet state
   const [walletConnected, setWalletConnected] = useState(false);
@@ -143,11 +211,15 @@ const LoanBorrowerFlow = () => {
       }
 
       // Map backend response to expected format
+      // CRITICAL: Truncate commitments to 65 chars to match contract felt252 limit
+      const truncatedIdentityCommitment = response.data.identityCommitment.slice(0, 65);
+      const truncatedCommitment = response.data.commitment.slice(0, 65);
+      
       const zkProofData = {
         ...response.data,
-        commitmentHash: response.data.identityCommitment, // Use IDENTITY for applications
-        commitment: response.data.commitment, // Current proof commitment (may differ)
-        identityCommitment: response.data.identityCommitment // Permanent identity
+        commitmentHash: truncatedIdentityCommitment, // Use IDENTITY for applications (65 chars)
+        commitment: truncatedCommitment, // Current proof commitment (65 chars)
+        identityCommitment: truncatedIdentityCommitment // Permanent identity (65 chars)
       };
 
       setZkProof(zkProofData);
@@ -256,10 +328,10 @@ const LoanBorrowerFlow = () => {
           contractAddress: ACTIVITY_VERIFIER_ADDRESS,
           entrypoint: 'register_proof',
           calldata: [
-            proofHashNum.toString(),         // felt252 as decimal string
-            commitmentNum.toString(),        // felt252 as decimal string
-            activityScoreU256.low.toString(), // u256.low
-            activityScoreU256.high.toString() // u256.high
+            proofHashFelt,         // felt252 as hex string (starknet.js will convert)
+            commitmentFelt,        // felt252 as hex string
+            activityScoreU256.low, // u256.low (already a BigInt from bnToUint256)
+            activityScoreU256.high // u256.high (already a BigInt)
           ]
         });
 
@@ -269,11 +341,15 @@ const LoanBorrowerFlow = () => {
         await provider.waitForTransaction(registerTx.transaction_hash);
         console.log('Proof registered on-chain!');
         
+        // CRITICAL: Truncate commitment to 65 chars (63 hex chars after 0x) to match contract felt252
+        // The backend expects 65-char commitments
+        const truncatedCommitment = zkProofData.commitmentHash.slice(0, 65);
+        
         // Save to localStorage for persistence
-        localStorage.setItem('zkCommitment', zkProofData.commitmentHash);
+        localStorage.setItem('zkCommitment', truncatedCommitment);
         localStorage.setItem('zkProofHash', zkProofData.proofHash);
         localStorage.setItem('zkActivityScore', activityData.score.toString());
-        console.log('💾 Saved ZK proof to localStorage');
+        console.log('💾 Saved ZK proof to localStorage (commitment truncated to 65 chars)');
         
         alert('✅ Proof registered successfully! Transaction: ' + registerTx.transaction_hash.slice(0, 10) + '...');
       } catch (txError) {
@@ -286,9 +362,10 @@ const LoanBorrowerFlow = () => {
 
       setZkProofGenerated(true);
       
-      // Load available loans
+      // Load available loans, applications, and active loans
       await loadAvailableLoans();
       await loadMyApplications();
+      await loadMyActiveLoans();
     } catch (error) {
       console.error('ZK proof generation/registration failed:', error);
       alert('Failed to generate/register ZK proof: ' + error.message);
@@ -489,67 +566,60 @@ const LoanBorrowerFlow = () => {
   // Repay Loan
   const repayLoan = async (loan) => {
     try {
-      console.log('💸 Repaying loan:', loan.id);
+      console.log('💸 Repaying loan:', loan.loanId);
       
       const starknet = await connect();
       const provider = new RpcProvider({ 
         nodeUrl: import.meta.env.VITE_STARKNET_RPC 
       });
 
-      // Calculate repayment amount
-      const repaymentAmount = parseFloat(loan.amount) * (1 + parseFloat(loan.interestRate) / 100);
-      const repaymentWei = BigInt(Math.floor(repaymentAmount * 1e18));
+      // Calculate repayment amount (amount is in wei already from backend)
+      const principalWei = BigInt(loan.amount);
+      const interestRateBps = BigInt(loan.interestRate);
+      const interestWei = (principalWei * interestRateBps) / BigInt(10000);
+      const repaymentWei = principalWei + interestWei;
 
-      // ERC20 ABI for approve function
-      const erc20Abi = [
-        {
-          name: 'approve',
-          type: 'function',
-          inputs: [
-            { name: 'spender', type: 'felt' },
-            { name: 'amount', type: 'Uint256' }
-          ],
-          outputs: [{ name: 'success', type: 'felt' }],
-          stateMutability: 'external'
-        }
-      ];
+      console.log('💰 Repayment breakdown:');
+      console.log('  Principal:', (Number(principalWei) / 1e18).toFixed(4), 'STRK');
+      console.log('  Interest:', (Number(interestWei) / 1e18).toFixed(4), 'STRK');
+      console.log('  Total:', (Number(repaymentWei) / 1e18).toFixed(4), 'STRK');
 
-      // 1. Approve STRK
-      console.log('📝 Approving STRK...');
-      const strkContract = new Contract(
-        erc20Abi,
-        STRK_TOKEN_ADDRESS,
-        starknet.account
-      );
-      
-      console.log('💰 Repayment amount:', repaymentAmount, 'STRK =', repaymentWei.toString(), 'wei');
-
-      // Convert to Uint256 format and use CallData.compile
+      // 1. Approve STRK tokens
+      console.log('📝 Approving STRK spending...');
       const amountUint256 = uint256.bnToUint256(repaymentWei);
-      console.log('💰 Uint256 format:', amountUint256);
-
-      const approveCalldata = CallData.compile({
-        spender: LOAN_ESCROW_ADDRESS,
-        amount: amountUint256
+      
+      const approveTx = await starknet.account.execute({
+        contractAddress: STRK_TOKEN_ADDRESS,
+        entrypoint: 'approve',
+        calldata: [
+          LOAN_ESCROW_ADDRESS,
+          amountUint256.low.toString(),
+          amountUint256.high.toString()
+        ]
       });
-
-      const approveTx = await strkContract.invoke('approve', approveCalldata);
       
       console.log('⏳ Waiting for approval tx:', approveTx.transaction_hash);
       await provider.waitForTransaction(approveTx.transaction_hash);
-      console.log('✅ Approval confirmed');
+      console.log('✅ STRK spending approved!');
 
-      // 2. Repay loan via backend
-      console.log('💰 Repaying loan via API...');
-      const response = await axios.post('http://localhost:3000/api/loan/repay', {
-        loanId: loan.id || loan.loanId,
-        borrowerAddress: walletAddress,
-        borrowerCommitment: zkProof?.commitmentHash
+      // 2. Call repay_loan on contract
+      console.log('💰 Calling repay_loan on contract...');
+      const loanIdU256 = uint256.bnToUint256(BigInt(loan.loanId));
+      
+      const repayTx = await starknet.account.execute({
+        contractAddress: LOAN_ESCROW_ADDRESS,
+        entrypoint: 'repay_loan',
+        calldata: [
+          loanIdU256.low.toString(),
+          loanIdU256.high.toString()
+        ]
       });
+      
+      console.log('⏳ Waiting for repayment tx:', repayTx.transaction_hash);
+      const receipt = await provider.waitForTransaction(repayTx.transaction_hash);
+      console.log('✅ Loan repaid on blockchain!', receipt);
 
-      console.log('✅ Loan repayment recorded:', response.data);
-
-      alert('✅ Loan repaid successfully!');
+      alert(`✅ Loan #${loan.loanId} repaid successfully!\n\nYou repaid ${(Number(repaymentWei) / 1e18).toFixed(4)} STRK`);
       
       // Reload data
       await loadMyActiveLoans();
@@ -566,6 +636,16 @@ const LoanBorrowerFlow = () => {
       fetchActivityData();
     }
   }, [walletConnected, walletAddress]);
+
+  // Initial load when zkProof is available
+  useEffect(() => {
+    if (zkProofGenerated && zkProof) {
+      console.log('🔄 Initial load - fetching all loan data...');
+      loadAvailableLoans();
+      loadMyApplications();
+      loadMyActiveLoans();
+    }
+  }, [zkProofGenerated, zkProof]);
 
   // Auto-refresh loans every 30 seconds
   useEffect(() => {
@@ -702,44 +782,53 @@ const LoanBorrowerFlow = () => {
           <div className="loans-section urgent">
             <h2>⚠️ Your Active Loans ({myActiveLoans.length})</h2>
             <div className="loans-grid">
-              {myActiveLoans.map((loan, idx) => (
-                <div key={idx} className="loan-card active-loan">
-                  <div className="loan-header">
-                    <h3>Loan #{loan.id}</h3>
-                    <span className="status-badge active">ACTIVE</span>
-                  </div>
-                  
-                  <div className="loan-details">
-                    <div className="detail-row">
-                      <span>💰 Borrowed:</span>
-                      <strong>{loan.amount} STRK</strong>
+              {myActiveLoans.map((loan, idx) => {
+                const repaymentAmount = parseFloat(loan.amount) * (1 + parseFloat(loan.interestRate) / 10000);
+                
+                return (
+                  <div key={idx} className="loan-card active-loan">
+                    <div className="loan-header">
+                      <h3>Loan #{loan.loanId}</h3>
+                      <span className="status-badge active">✅ ACTIVE</span>
                     </div>
-                    <div className="detail-row">
-                      <span>💸 Repayment:</span>
-                      <strong>{(parseFloat(loan.amount) * (1 + parseFloat(loan.interestRate) / 100)).toFixed(2)} STRK</strong>
+                    
+                    <div className="loan-details">
+                      <div className="detail-row">
+                        <span>💰 Borrowed:</span>
+                        <strong>{(parseFloat(loan.amount) / 1e18).toFixed(4)} STRK</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>💸 Must Repay:</span>
+                        <strong>{(repaymentAmount / 1e18).toFixed(4)} STRK</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>📈 Interest:</span>
+                        <strong>{(parseFloat(loan.interestRate) / 100).toFixed(2)}%</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>� Approved:</span>
+                        <strong>{new Date(loan.approvedAt).toLocaleDateString()}</strong>
+                      </div>
                     </div>
-                    <div className="detail-row">
-                      <span>⏰ Deadline:</span>
-                      <strong className="deadline">{loan.deadline}</strong>
-                    </div>
-                    <div className="detail-row">
-                      <span>📈 Interest:</span>
-                      <strong>{loan.interestRate}%</strong>
-                    </div>
-                  </div>
 
-                  <button 
-                    onClick={() => repayLoan(loan)}
-                    className="btn-primary btn-block"
-                  >
-                    💸 Repay Now
-                  </button>
-                  
-                  <div className="warning-box">
-                    <p>⚠️ Repay before deadline or your identity will be revealed!</p>
+                    {/* ⏰ Countdown Timer */}
+                    {loan.repaymentDeadline && (
+                      <RepaymentCountdown deadline={loan.repaymentDeadline} />
+                    )}
+
+                    <button 
+                      onClick={() => repayLoan(loan)}
+                      className="btn-primary btn-block"
+                    >
+                      💸 Repay Now
+                    </button>
+                    
+                    <div className="warning-box">
+                      <p>⚠️ Repay before deadline or your identity will be revealed!</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
