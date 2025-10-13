@@ -25,6 +25,7 @@ export default function Navigation() {
     { name: 'Home', href: '/' },
     { name: 'Analyze', href: '/wallet-analysis' },
     { name: 'Dashboard', href: '/dashboard' },
+    { name: 'Lenders', href: '/lenders' },
     { name: 'How It Works', href: '/how-it-works' },
   ]
 

@@ -111,7 +111,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-black tracking-tight mb-2">Dashboard</h1>
-              <p className="text-white/70">Manage your loans and track repayments</p>
+              <p className="text-white/80">Manage your loans and track repayments</p>
             </div>
             {!walletAddress && (
               <Button 
@@ -143,7 +143,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   <span className="text-sm font-medium">Connected:</span>
-                  <span className="text-sm font-mono text-white/70">{formatAddress(walletAddress)}</span>
+                  <span className="text-sm font-mono text-white/80">{formatAddress(walletAddress)}</span>
                 </div>
               </div>
             </RevealOnView>
@@ -151,57 +151,57 @@ export default function DashboardPage() {
             {/* Stats Grid */}
             <div className="grid gap-6 md:grid-cols-3 mb-8">
               <RevealOnView>
-                <Card className="bg-neutral-900/60 border-white/10 relative overflow-hidden">
+                <Card className="bg-neutral-900/80 border-white/10 relative overflow-hidden">
                   <div className="pointer-events-none absolute inset-0 opacity-5">
                     <DotGridShader />
                   </div>
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-white/70">Total Borrowed</CardTitle>
+                    <CardTitle className="text-sm font-medium text-white/80">Total Borrowed</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
                         <DollarSign className="h-5 w-5 text-purple-500" />
                       </div>
-                      <div className="text-3xl font-bold">{formatCurrency(totalBorrowed)}</div>
+                      <div className="text-3xl font-bold text-white">{formatCurrency(totalBorrowed)}</div>
                     </div>
                   </CardContent>
                 </Card>
               </RevealOnView>
 
               <RevealOnView>
-                <Card className="bg-neutral-900/60 border-white/10 relative overflow-hidden">
+                <Card className="bg-neutral-900/80 border-white/10 relative overflow-hidden">
                   <div className="pointer-events-none absolute inset-0 opacity-5">
                     <DotGridShader />
                   </div>
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-white/70">Remaining Balance</CardTitle>
+                    <CardTitle className="text-sm font-medium text-white/80">Remaining Balance</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                         <TrendingUp className="h-5 w-5 text-blue-500" />
                       </div>
-                      <div className="text-3xl font-bold">{formatCurrency(totalRemaining)}</div>
+                      <div className="text-3xl font-bold text-white">{formatCurrency(totalRemaining)}</div>
                     </div>
                   </CardContent>
                 </Card>
               </RevealOnView>
 
               <RevealOnView>
-                <Card className="bg-neutral-900/60 border-white/10 relative overflow-hidden">
+                <Card className="bg-neutral-900/80 border-white/10 relative overflow-hidden">
                   <div className="pointer-events-none absolute inset-0 opacity-5">
                     <DotGridShader />
                   </div>
                   <CardHeader>
-                    <CardTitle className="text-sm font-medium text-white/70">Active Loans</CardTitle>
+                    <CardTitle className="text-sm font-medium text-white/80">Active Loans</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
                         <CheckCircle className="h-5 w-5 text-green-500" />
                       </div>
-                      <div className="text-3xl font-bold">{activeLoans}</div>
+                      <div className="text-3xl font-bold text-white">{activeLoans}</div>
                     </div>
                   </CardContent>
                 </Card>
@@ -210,7 +210,7 @@ export default function DashboardPage() {
 
             {/* Loans List */}
             <RevealOnView>
-              <Card className="bg-neutral-900/60 border-white/10">
+              <Card className="bg-neutral-900/80 border-white/10">
                 <CardHeader>
                   <CardTitle>Your Loans</CardTitle>
                   <CardDescription>All your loan requests and active loans</CardDescription>
@@ -239,12 +239,12 @@ export default function DashboardPage() {
                           <div className="flex items-start justify-between mb-3">
                             <div>
                               <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-semibold">{formatCurrency(loan.amount)} Loan</h3>
+                                <h3 className="font-semibold text-white">{formatCurrency(loan.amount)} Loan</h3>
                                 <Badge className={getStatusColor(loan.status)}>
                                   {loan.status}
                                 </Badge>
                               </div>
-                              <p className="text-xs text-white/50 font-mono">{loan.id}</p>
+                              <p className="text-xs text-white/70 font-mono">{loan.id}</p>
                             </div>
                             <Button variant="outline" size="sm" className="border-white/20">
                               View Details
@@ -253,19 +253,19 @@ export default function DashboardPage() {
 
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div>
-                              <p className="text-white/50 text-xs mb-1">Interest Rate</p>
-                              <p className="font-medium">{loan.interestRate}%</p>
+                              <p className="text-white/70 text-xs mb-1">Interest Rate</p>
+                              <p className="font-medium text-white">{loan.interestRate}%</p>
                             </div>
                             <div>
-                              <p className="text-white/50 text-xs mb-1">Duration</p>
-                              <p className="font-medium">{loan.duration} months</p>
+                              <p className="text-white/70 text-xs mb-1">Duration</p>
+                              <p className="font-medium text-white">{loan.duration} months</p>
                             </div>
                             <div>
-                              <p className="text-white/50 text-xs mb-1">Monthly Payment</p>
-                              <p className="font-medium">{formatCurrency(loan.monthlyPayment)}</p>
+                              <p className="text-white/70 text-xs mb-1">Monthly Payment</p>
+                              <p className="font-medium text-white">{formatCurrency(loan.monthlyPayment)}</p>
                             </div>
                             <div>
-                              <p className="text-white/50 text-xs mb-1">Remaining</p>
+                              <p className="text-white/70 text-xs mb-1">Remaining</p>
                               <p className="font-medium text-purple-500">{formatCurrency(loan.remainingBalance)}</p>
                             </div>
                           </div>
@@ -273,7 +273,7 @@ export default function DashboardPage() {
                           {loan.status === 'active' && (
                             <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-sm">
                               <Clock className="h-4 w-4 text-white/50" />
-                              <span className="text-white/70">Next payment due: {loan.nextPaymentDate}</span>
+                              <span className="text-white/80">Next payment due: {loan.nextPaymentDate}</span>
                             </div>
                           )}
                         </div>

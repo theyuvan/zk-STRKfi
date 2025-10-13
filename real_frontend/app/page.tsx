@@ -2,10 +2,10 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import DotGridShader from "@/components/DotGridShader"
 import AnimatedHeading from "@/components/animated-heading"
 import RevealOnView from "@/components/reveal-on-view"
 import FeatureCard from "@/components/feature-card"
+import LightRays from "@/components/LightRays"
 
 export default function Page() {
   const features = [
@@ -48,9 +48,24 @@ export default function Page() {
   ]
 
   return (
-    <main className="bg-neutral-950 text-white min-h-screen">
+    <main className="bg-neutral-950 text-white min-h-screen relative">
+      {/* Light Rays Background */}
+      <div className="fixed inset-0 z-0">
+        <LightRays
+          raysOrigin="top-center"
+          raysColor="#B19EEF"
+          raysSpeed={1.5}
+          lightSpread={0.8}
+          rayLength={1.2}
+          followMouse={true}
+          mouseInfluence={0.1}
+          noiseAmount={0.1}
+          distortion={0.05}
+        />
+      </div>
+
       {/* Hero Section */}
-      <section className="px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
+      <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
         <div className="max-w-6xl mx-auto text-center">
           <RevealOnView intensity="hero">
             <div className="mb-4 flex items-center justify-center gap-2">
@@ -101,7 +116,7 @@ export default function Page() {
       </section>
 
       {/* Features Section */}
-      <section className="px-4 sm:px-6 lg:px-8 py-16 lg:py-24 border-t border-white/10">
+      <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-16 lg:py-24 border-t border-white/10">
         <div className="max-w-6xl mx-auto">
           <RevealOnView className="text-center mb-12">
             <h2 className="text-3xl font-black tracking-tight sm:text-4xl mb-4">Why Choose Loanzy?</h2>
@@ -126,7 +141,7 @@ export default function Page() {
       </section>
 
       {/* How It Works Section */}
-      <section className="px-4 sm:px-6 lg:px-8 py-16 lg:py-24 border-t border-white/10">
+      <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-16 lg:py-24 border-t border-white/10">
         <div className="max-w-5xl mx-auto">
           <RevealOnView>
             <h2 className="text-3xl font-black tracking-tight sm:text-4xl mb-4">How It Works</h2>
