@@ -3,8 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const logger = require('./utils/logger');
 
-// Import routes
-const loanRoutes = require('./routes/loanRoutes');
+// Import routes - Using ON-CHAIN routes (no in-memory cache)
+const loanRoutes = require('./routes/loanRoutes_onchain'); // ✅ On-chain blockchain queries
 const proofRoutes = require('./routes/proofRoutes');
 const identityRoutes = require('./routes/identityRoutes');
 const payrollRoutes = require('./routes/payrollRoutes');

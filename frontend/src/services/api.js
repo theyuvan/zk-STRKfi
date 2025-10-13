@@ -27,9 +27,45 @@ export const proofApi = {
   },
 };
 
-// Loan API
+// Loan API - ✅ ON-CHAIN ROUTES (matches loanRoutes_onchain.js)
 export const loanApi = {
+  // Get all available loan offers from blockchain
+  getAvailableLoans: async () => {
+    const response = await api.get('/api/loan/available');
+    return response.data;
+  },
+
+  // Get loans created by a specific lender
+  getLenderLoans: async (lenderAddress) => {
+    const response = await api.get(`/api/loan/lender/${lenderAddress}`);
+    return response.data;
+  },
+
+  // Get application details for a specific loan and commitment
+  getApplication: async (loanId, commitment) => {
+    const response = await api.get(`/api/loan/application/${loanId}/${commitment}`);
+    return response.data;
+  },
+
+  // Get all applications for a borrower (by commitment)
+  getBorrowerApplications: async (commitment) => {
+    const response = await api.get(`/api/loan/borrower/${commitment}/applications`);
+    return response.data;
+  },
+
+  // Register ZK proof on-chain
+  registerProof: async (proofHash, commitment, activityScore) => {
+    const response = await api.post('/api/loan/register-proof', {
+      proofHash,
+      commitment,
+      activityScore,
+    });
+    return response.data;
+  },
+
+  // Legacy endpoints (kept for backward compatibility, but will be removed)
   createRequest: async (borrowerAddress, amount, threshold, proofHash, commitment) => {
+    console.warn('⚠️ Using legacy createRequest - should use smart contract directly');
     const response = await api.post('/api/loans/create', {
       borrowerAddress,
       amount,
@@ -41,6 +77,7 @@ export const loanApi = {
   },
   
   fundLoan: async (loanId, lenderAddress, cid) => {
+    console.warn('⚠️ Using legacy fundLoan - should use smart contract directly');
     const response = await api.post('/api/loans/fund', {
       loanId,
       lenderAddress,
@@ -50,11 +87,13 @@ export const loanApi = {
   },
   
   getLoanDetails: async (loanId) => {
+    console.warn('⚠️ Using legacy getLoanDetails - use getApplication instead');
     const response = await api.get(`/api/loans/${loanId}`);
     return response.data;
   },
   
   getUserLoans: async (userAddress) => {
+    console.warn('⚠️ Using legacy getUserLoans - use getLenderLoans or getBorrowerApplications instead');
     const response = await api.get(`/api/loans/user/${userAddress}`);
     return response.data;
   },

@@ -5,8 +5,9 @@ import { RpcProvider, num, Contract } from 'starknet';
  * Fetches STRK token balance and transaction history from Sepolia testnet
  */
 
-// StarkNet Sepolia STRK Token Contract
-const STRK_TOKEN_ADDRESS = '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
+// StarkNet Sepolia STRK Token Contract - ✅ Configured from env
+const STRK_TOKEN_ADDRESS = import.meta.env.VITE_STRK_TOKEN_ADDRESS || 
+  '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 
 // ERC20 ABI for STRK token
 const ERC20_ABI = [
@@ -42,6 +43,7 @@ export class StarkNetService {
                   'https://starknet-sepolia.public.blastapi.io';
     this.provider = new RpcProvider({ nodeUrl: this.rpcUrl });
     this.strkContract = new Contract(ERC20_ABI, STRK_TOKEN_ADDRESS, this.provider);
+    this.erc20Abi = ERC20_ABI; // Export ABI for external use
   }
 
   /**
@@ -350,3 +352,6 @@ export class StarkNetService {
 
 // Export singleton instance
 export const starknetService = new StarkNetService();
+
+// Default export for compatibility
+export default StarkNetService;

@@ -1,3 +1,10 @@
+// Clear require cache to force reload of all modules
+Object.keys(require.cache).forEach(key => {
+  if (key.includes('controllers')) {
+    delete require.cache[key];
+  }
+});
+
 require('dotenv').config();
 const app = require('./index');
 const logger = require('./utils/logger');

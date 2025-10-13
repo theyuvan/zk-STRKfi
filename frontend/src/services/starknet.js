@@ -1,9 +1,11 @@
 import { Contract } from 'starknet';
 
-// Contract addresses from environment variables
+// ✅ Contract addresses from environment variables - UPDATED
 const STARKNET_PAYROLL_CONTRACT = import.meta.env.VITE_STARKNET_PAYROLL_CONTRACT;
-const STARKNET_LOAN_ESCROW_CONTRACT = import.meta.env.VITE_STARKNET_LOAN_ESCROW_CONTRACT;
-const STARKNET_VERIFIER_CONTRACT = import.meta.env.VITE_STARKNET_VERIFIER_CONTRACT;
+const STARKNET_LOAN_ESCROW_CONTRACT = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS || 
+  '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+const STARKNET_VERIFIER_CONTRACT = import.meta.env.VITE_ACTIVITY_VERIFIER_ADDRESS || 
+  '0x071b94eb84b81868b61fb0ec1bbb59df47bb508583bc79325e5fa997ee3eb4be';
 
 export class StarkNetService {
   constructor(wallet) {

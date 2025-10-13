@@ -5,7 +5,8 @@ import HomePage from './pages/HomePage';
 import LoanRequestPage from './pages/LoanRequestPage';
 import LoanDashboard from './pages/LoanDashboard';
 import PayrollConnectPage from './pages/PayrollConnectPage';
-import LoanBorrowerFlow from './pages/LoanBorrowerFlow';
+import LoanBorrowerFlow from './pages/LoanBorrowerFlowNew'; // Updated flow
+import LoanLenderFlow from './pages/LoanLenderFlow'; // New lender portal
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="dashboard" element={<LoanDashboard />} />
           <Route path="payroll" element={<PayrollConnectPage />} />
           <Route path="loan-borrower" element={<LoanBorrowerFlow />} />
+          <Route path="loan-lender" element={<LoanLenderFlow />} /> {/* New lender portal */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
