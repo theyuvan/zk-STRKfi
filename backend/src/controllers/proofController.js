@@ -1,6 +1,7 @@
 const zkService = require('../services/zkService');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
+const commitmentCache = require('../services/commitmentCacheService');
 
 /**
  * Controller for ZK proof generation and verification
@@ -134,6 +135,11 @@ class ProofController {
         proofHash: proofHash.substring(0, 20) + '...',
         identityCommitment: finalIdentityCommitment.slice(0, 20) + '...'
       });
+
+      // ===== ADD TO COMMITMENT CACHE =====
+      // Cache this borrower's permanent identity so lenders can discover applications
+      commitmentCache.addCommitment(finalIdentityCommitment);
+      logger.info('💾 [CACHE] Commitment cached for future application discovery');
 
       res.json({
         message: 'Proof generated successfully',

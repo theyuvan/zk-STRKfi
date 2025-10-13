@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
 const { RpcProvider, Contract, CallData, uint256, hash } = require('starknet');
+const commitmentCache = require('../services/commitmentCacheService'); // Import at top!
 
 // Contract addresses (update after deployment)
 const LOAN_ESCROW_ZK_ADDRESS = process.env.LOAN_ESCROW_ZK_ADDRESS || '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
@@ -351,7 +352,7 @@ router.get('/application/:loanId/:commitment', async (req, res) => {
 
 /**
  * Get all applications for a specific loan
- * This queries LoanApplicationSubmitted events from blockchain
+ * Uses cached commitments from commitment cache for efficient lookup
  */
 router.get('/:loanId/applications', async (req, res) => {
   try {
@@ -379,75 +380,57 @@ router.get('/:loanId/applications', async (req, res) => {
     
     logger.info('✅ Loan found', { loanId, lender: loanDetails.lender });
     
-    // Query LoanApplicationSubmitted events for this loan_id
+    // NEW APPROACH: Use commitment cache to find applications
     const applications = [];
     
     try {
-      logger.info('🔍 Querying LoanApplicationSubmitted events...');
+      logger.info('🔍 Using commitment cache to find applications...');
       
-      // Get event selector for LoanApplicationSubmitted
-      const eventKey = hash.getSelectorFromName('LoanApplicationSubmitted');
-      logger.info('Event selector:', eventKey);
+      // Get all known commitments from the cache service
+      const allKnownCommitments = commitmentCache.getAllCommitments();
       
-      const eventFilter = {
-        from_block: { block_number: 0 }, // Query from genesis
-        to_block: 'latest',
-        address: LOAN_ESCROW_ZK_ADDRESS,
-        keys: [[eventKey]],
-        chunk_size: 1000
-      };
-
-      logger.info('🔍 Querying with filter:', { 
-        address: LOAN_ESCROW_ZK_ADDRESS,
-        eventKey,
-        from_block: 0 
-      });
-
-      const eventsResult = await provider.getEvents(eventFilter);
-      logger.info(`📊 Total events found: ${eventsResult.events?.length || 0}`);
-
-      if (eventsResult.events && eventsResult.events.length > 0) {
-        logger.info('📋 Sample event structure:', JSON.stringify(eventsResult.events[0], null, 2));
-      }
-
-      // Filter events for this specific loan_id and fetch application details
-      for (const event of (eventsResult.events || [])) {
-        try {
-          // Parse event data
-          // Event structure: LoanApplicationSubmitted(loan_id: u256, borrower: ContractAddress, commitment: felt252)
-          const eventLoanIdLow = event.data[0];
-          const eventLoanIdHigh = event.data[1];
-          const eventLoanId = uint256.uint256ToBN({ low: eventLoanIdLow, high: eventLoanIdHigh }).toString();
-          
-          if (eventLoanId === loanId.toString()) {
-            const borrowerAddress = event.data[2];
-            const commitment = event.data[3];
-            
-            logger.info(`✅ Found application for loan ${loanId}!`, { 
-              borrower: borrowerAddress,
-              commitment: commitment.slice(0, 20) + '...'
+      logger.info(`📊 Total known commitments in cache: ${allKnownCommitments.length}`);
+      
+      if (allKnownCommitments.length === 0) {
+        logger.warn('⚠️ Commitment cache is EMPTY! No applications can be found.');
+        logger.warn('💡 TIP: Borrowers must generate ZK proofs first, or visit their applications page to populate the cache.');
+      } else {
+        // FALLBACK: Scan all known commitments for this specific loan
+        logger.info(`⚠️ Scanning ${allKnownCommitments.length} known commitments for loan ${loanId}...`);
+        
+        for (const commitment of allKnownCommitments) {
+          try {
+            const appRawResult = await provider.callContract({
+              contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+              entrypoint: 'get_application',
+              calldata: [loanLow, loanHigh, commitment]
             });
 
-            // Fetch full application details from contract
-            try {
-              const appRawResult = await provider.callContract({
-                contractAddress: LOAN_ESCROW_ZK_ADDRESS,
-                entrypoint: 'get_application',
-                calldata: [loanLow, loanHigh, commitment]
+            const appDetails = {
+              borrower: appRawResult.result[0],
+              commitment: appRawResult.result[1],
+              proof_hash: appRawResult.result[2],
+              status: Number(appRawResult.result[3]),
+              applied_at: Number(appRawResult.result[4]),
+              approved_at: Number(appRawResult.result[5]),
+              repaid_at: Number(appRawResult.result[6]),
+              repayment_deadline: Number(appRawResult.result[7])
+            };
+            
+            // If borrower is not 0x0, this is a real application
+            if (appDetails.borrower !== '0x0' && appDetails.borrower) {
+              logger.info(`✅ Found application via fallback scan!`, { 
+                borrower: appDetails.borrower,
+                commitment: appDetails.commitment.slice(0, 20) + '...'
               });
-
-              const appDetails = {
-                borrower: appRawResult.result[0],
-                commitment: appRawResult.result[1],
-                proof_hash: appRawResult.result[2],
-                status: Number(appRawResult.result[3]),
-                applied_at: Number(appRawResult.result[4]),
-                approved_at: Number(appRawResult.result[5]),
-                repaid_at: Number(appRawResult.result[6]),
-                repayment_deadline: Number(appRawResult.result[7])
-              };
-
-              // Get activity score from verifier contract
+              
+              // Add to cache for future lookups
+              if (!commitmentCache.loanApplications.has(loanId)) {
+                commitmentCache.loanApplications.set(loanId, new Set());
+              }
+              commitmentCache.loanApplications.get(loanId).add(commitment);
+              
+              // Get activity score
               let activityScore = 0;
               try {
                 const scoreResult = await provider.callContract({
@@ -466,52 +449,53 @@ router.get('/:loanId/applications', async (req, res) => {
               applications.push({
                 loanId,
                 borrower: appDetails.borrower,
+                borrowerCommitment: appDetails.commitment, // Frontend expects this
                 commitment: appDetails.commitment,
                 proofHash: appDetails.proof_hash,
                 activityScore,
                 status: appDetails.status === 0 ? 'pending' : appDetails.status === 1 ? 'approved' : 'repaid',
+                timestamp: new Date(appDetails.applied_at * 1000).toISOString(),
                 appliedAt: new Date(appDetails.applied_at * 1000).toISOString(),
                 approvedAt: appDetails.approved_at > 0 ? new Date(appDetails.approved_at * 1000).toISOString() : null,
                 repaidAt: appDetails.repaid_at > 0 ? new Date(appDetails.repaid_at * 1000).toISOString() : null,
                 repaymentDeadline: appDetails.repayment_deadline > 0 ? new Date(appDetails.repayment_deadline * 1000).toISOString() : null
               });
-            } catch (appError) {
-              logger.error(`Failed to fetch application details for commitment ${commitment}:`, appError.message);
             }
+          } catch (err) {
+            // Ignore errors for commitments that don't have applications to this loan
           }
-        } catch (parseError) {
-          logger.error('Failed to parse event:', parseError.message);
-        }
       }
-      
-      logger.info(`✅ Found ${applications.length} applications for loan ${loanId}`);
-    } catch (eventError) {
-      logger.error('❌ Event querying failed:', eventError.message);
-      logger.info('⚠️ Returning loan details without applications due to event query failure');
+      // No else block needed here; remove to fix syntax error.
     }
-    
-    res.json({
-      success: true,
-      loanId,
-      loanDetails: {
-        lender: loanDetails.lender,
-        amount: loanDetails.amount_per_borrower.toString(),
-        interestRate: loanDetails.interest_rate_bps.toString(),
-        minActivityScore: loanDetails.min_activity_score.toString()
-      },
-      applications,
-      message: applications.length === 0 
-        ? 'No applications found for this loan' 
-        : `Found ${applications.length} application(s)`
-    });
-  } catch (error) {
-    logger.error('❌ Error fetching loan applications:', { 
-      error: error.message, 
-      stack: error.stack,
-      loanId: req.params.loanId 
-    });
-    res.status(500).json({ error: error.message || 'Failed to fetch applications' });
+
+    logger.info(`✅ Found ${applications.length} applications for loan ${loanId}`);
+  } catch (cacheError) {
+    logger.error('❌ Cache-based lookup failed:', cacheError.message);
+    logger.info('⚠️ Returning loan details without applications');
   }
+
+  res.json({
+    success: true,
+    loanId,
+    loanDetails: {
+      lender: loanDetails.lender,
+      amount: loanDetails.amount_per_borrower.toString(),
+      interestRate: loanDetails.interest_rate_bps.toString(),
+      minActivityScore: loanDetails.min_activity_score.toString()
+    },
+    applications,
+    message: applications.length === 0 
+      ? 'No applications found for this loan' 
+      : `Found ${applications.length} application(s)`
+  });
+} catch (error) {
+  logger.error('❌ Error fetching loan applications:', { 
+    error: error.message, 
+    stack: error.stack,
+    loanId: req.params.loanId 
+  });
+  res.status(500).json({ error: error.message || 'Failed to fetch applications' });
+}
 });
 
 /**
@@ -593,6 +577,12 @@ router.get('/borrower/:commitment/applications', async (req, res) => {
               commitment: application.commitment,
               status: application.status
             });
+
+            // ===== ADD TO COMMITMENT CACHE =====
+            // Cache this borrower's commitment for lender discovery
+            commitmentCache.addCommitment(commitmentVariant, i);
+            logger.info(`💾 [CACHE] Commitment cached for loan #${i} discovery`);
+
           const loanRawResult = await provider.callContract({
             contractAddress: LOAN_ESCROW_ZK_ADDRESS,
             entrypoint: 'get_loan_details',
@@ -828,6 +818,182 @@ router.get('/proof/:proofHash/verify', async (req, res) => {
     });
   } catch (error) {
     logger.error('❌ Error checking proof:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * NEW ENDPOINT: Get all applications for a specific loan by scanning known commitments
+ * This endpoint discovers applications by:
+ * 1. Collecting all known commitments from the commitment cache
+ * 2. Testing each commitment against the target loan
+ * 3. Returning applications with their VISIBLE permanent identity commitments
+ * 
+ * This solves the visibility issue where lenders couldn't see borrower identities
+ */
+router.get('/:loanId/applications/scan', async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    
+    logger.info(`🔎 [NEW-SCAN] Starting application scan for loan #${loanId}`);
+
+    // Step 1: Get loan details and verify it exists
+    const { low: loanLow, high: loanHigh } = uint256.bnToUint256(BigInt(loanId));
+    
+    const loanRawResult = await provider.callContract({
+      contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+      entrypoint: 'get_loan_details',
+      calldata: [loanLow, loanHigh]
+    });
+    
+    const loanDetails = {
+      lender: loanRawResult.result[0],
+      amount_per_borrower: uint256.uint256ToBN({ low: loanRawResult.result[1], high: loanRawResult.result[2] }),
+      total_slots: Number(loanRawResult.result[3]),
+      filled_slots: Number(loanRawResult.result[4]),
+      interest_rate_bps: uint256.uint256ToBN({ low: loanRawResult.result[5], high: loanRawResult.result[6] }),
+      min_activity_score: uint256.uint256ToBN({ low: loanRawResult.result[8], high: loanRawResult.result[9] }),
+      status: Number(loanRawResult.result[10])
+    };
+    
+    logger.info(`✅ [NEW-SCAN] Loan #${loanId} found`, { 
+      lender: loanDetails.lender.slice(0, 20) + '...',
+      filled_slots: loanDetails.filled_slots,
+      total_slots: loanDetails.total_slots
+    });
+
+    // Step 2: Get all known commitments from cache
+    const knownCommitments = commitmentCache.getAllCommitments();
+    logger.info(`📊 [NEW-SCAN] Testing ${knownCommitments.length} known commitments from cache`);
+    
+    if (knownCommitments.length === 0) {
+      logger.warn(`⚠️ [NEW-SCAN] No commitments in cache yet. Commitments are added when borrowers generate proofs.`);
+    }
+
+    // Step 3: Test each commitment against this loan
+    const applications = [];
+    
+    for (const commitment of knownCommitments) {
+      try {
+        // Also try truncated version for backwards compatibility
+        const commitmentVariants = [commitment];
+        if (commitment.length === 66) { // 0x + 64 hex chars
+          const truncated = '0x' + commitment.slice(2, 65);
+          commitmentVariants.push(truncated);
+        }
+
+        for (const commitmentVariant of commitmentVariants) {
+          try {
+            const appRawResult = await provider.callContract({
+              contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+              entrypoint: 'get_application',
+              calldata: [loanLow, loanHigh, commitmentVariant]
+            });
+            
+            // Parse Application struct
+            const appDetails = {
+              borrower: appRawResult.result[0],
+              commitment: appRawResult.result[1],
+              proof_hash: appRawResult.result[2],
+              status: Number(appRawResult.result[3]),
+              applied_at: Number(appRawResult.result[4]),
+              approved_at: Number(appRawResult.result[5]),
+              repaid_at: Number(appRawResult.result[6]),
+              repayment_deadline: Number(appRawResult.result[7])
+            };
+
+            // If borrower is not zero address, we found an application!
+            if (appDetails.borrower !== '0x0' && appDetails.borrower) {
+              logger.info(`✅ [NEW-SCAN] Found application from commitment ${commitmentVariant.slice(0, 20)}...!`, {
+                borrower: appDetails.borrower.slice(0, 20) + '...',
+                status: appDetails.status
+              });
+
+              // Get activity score
+              let activityScore = 0;
+              try {
+                const scoreResult = await provider.callContract({
+                  contractAddress: ACTIVITY_VERIFIER_ADDRESS,
+                  entrypoint: 'get_proof_score',
+                  calldata: [appDetails.proof_hash]
+                });
+                activityScore = uint256.uint256ToBN({ 
+                  low: scoreResult.result[0], 
+                  high: scoreResult.result[1] 
+                }).toString();
+              } catch (scoreError) {
+                logger.warn(`Could not fetch activity score for ${appDetails.proof_hash}`);
+              }
+
+              applications.push({
+                loanId,
+                borrowerAddress: appDetails.borrower,
+                permanentIdentity: commitmentVariant, // THIS IS WHAT LENDERS SEE!
+                proofHash: appDetails.proof_hash,
+                activityScore,
+                status: appDetails.status === 0 ? 'pending' : appDetails.status === 1 ? 'approved' : 'repaid',
+                appliedAt: new Date(appDetails.applied_at * 1000).toISOString(),
+                approvedAt: appDetails.approved_at > 0 ? new Date(appDetails.approved_at * 1000).toISOString() : null,
+                repaymentDeadline: appDetails.repayment_deadline > 0 ? new Date(appDetails.repayment_deadline * 1000).toISOString() : null
+              });
+
+              // Cache the loan->commitment mapping for future
+              commitmentCache.addCommitment(commitmentVariant, loanId);
+              
+              break; // Found it, no need to try other variants
+            }
+          } catch (err) {
+            // Silent fail - commitment doesn't have application for this loan
+          }
+        }
+      } catch (err) {
+        // Silent fail for individual commitment tests
+      }
+    }
+    
+    logger.info(`✅ [NEW-SCAN] Found ${applications.length} applications for loan #${loanId}`);
+
+    // Return applications with visible permanent identities
+    res.json({
+      success: true,
+      loanId,
+      loanDetails: {
+        lender: loanDetails.lender,
+        amount: loanDetails.amount_per_borrower.toString(),
+        totalSlots: loanDetails.total_slots,
+        filledSlots: loanDetails.filled_slots,
+        interestRate: loanDetails.interest_rate_bps.toString(),
+        minActivityScore: loanDetails.min_activity_score.toString(),
+        status: loanDetails.status === 0 ? 'active' : loanDetails.status === 1 ? 'funded' : 'cancelled'
+      },
+      applications,
+      cacheInfo: {
+        totalKnownCommitments: knownCommitments.length,
+        applicationsFound: applications.length,
+        message: 'Commitments are cached when borrowers generate ZK proofs'
+      }
+    });
+  } catch (error) {
+    logger.error('❌ [NEW-SCAN] Error:', { error: error.message, stack: error.stack });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * NEW ENDPOINT: Get commitment cache statistics
+ * Useful for debugging and monitoring
+ */
+router.get('/cache/stats', async (req, res) => {
+  try {
+    const stats = commitmentCache.getStats();
+    
+    res.json({
+      success: true,
+      cache: stats,
+      message: 'Cache is populated when borrowers generate proofs and apply for loans'
+    });
+  } catch (error) {
+    logger.error('❌ Error fetching cache stats:', error);
     res.status(500).json({ error: error.message });
   }
 });
