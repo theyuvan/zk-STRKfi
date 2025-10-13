@@ -19,10 +19,10 @@ const logger = require('../utils/logger');
 class ZKService {
   constructor() {
     this.poseidon = null;
-    // Circuit files will be in contracts/zk/build/ after compilation
-    this.wasmPath = path.join(__dirname, '../../../contracts/zk/build/activityVerifier.wasm');
-    this.zkeyPath = path.join(__dirname, '../../../contracts/zk/build/activityVerifier.zkey');
-    this.vkeyPath = path.join(__dirname, '../../../contracts/zk/build/verification_key.json');
+    // Circuit files are in backend/src/zk/ (copied from contracts/zk/build/)
+    this.wasmPath = path.join(__dirname, '../zk/activityVerifier.wasm');
+    this.zkeyPath = path.join(__dirname, '../zk/activityVerifier_final.zkey');
+    this.vkeyPath = path.join(__dirname, '../zk/verification_key.json');
   }
 
   /**

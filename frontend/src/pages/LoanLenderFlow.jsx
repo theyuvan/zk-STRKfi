@@ -110,21 +110,32 @@ const LoanLenderFlow = () => {
   // Step 4: Generate ZK Proof
   const generateZKProof = async () => {
     try {
-      console.log('🔐 Generating ZK proof...');
+      console.log('Generating ZK proof for lender...');
+      
+      // Get connected wallet
+      const starknet = await connect();
+      if (!starknet || !starknet.account) {
+        throw new Error('Wallet not connected');
+      }
+      
+      const walletAddress = starknet.account.address;
+      console.log('Using wallet address:', walletAddress);
+      
       const response = await axios.post('http://localhost:3000/api/proof/generate', {
         salary: activityData.score,
-        threshold: 100 // Minimum score for lenders
+        threshold: 100, // Minimum score for lenders
+        walletAddress: walletAddress
       });
 
       setZkProof(response.data);
       setZkProofGenerated(true);
-      console.log('✅ ZK proof generated');
+      console.log('ZK proof generated:', response.data);
       
       // Load loans
       await loadMyLoans();
     } catch (error) {
-      console.error('❌ ZK proof generation failed:', error);
-      alert('Failed to generate ZK proof');
+      console.error('ZK proof generation failed:', error);
+      alert('Failed to generate ZK proof: ' + error.message);
     }
   };
 
@@ -160,7 +171,10 @@ const LoanLenderFlow = () => {
       });
 
       // Get connected wallet
+      console.log('🔌 Connecting to wallet...');
       const starknet = await connect();
+      console.log('✅ Wallet connected:', starknet?.account?.address);
+      
       if (!starknet || !starknet.account) {
         throw new Error('Wallet not connected');
       }
@@ -288,8 +302,10 @@ const LoanLenderFlow = () => {
     try {
       console.log('📋 Loading my loans...');
       const response = await axios.get(`http://localhost:3000/api/loan/lender/${walletAddress}`);
-      setMyLoans(response.data.loans || []);
-      console.log('✅ Loaded loans:', response.data.loans?.length || 0);
+      const loans = response.data.loans || [];
+      console.log('✅ Loaded loans:', loans.length);
+      console.log('📦 Loan details:', loans);
+      setMyLoans(loans);
     } catch (error) {
       console.error('❌ Failed to load loans:', error);
       setMyLoans([]);
@@ -309,30 +325,70 @@ const LoanLenderFlow = () => {
     }
   };
 
-  // Approve borrower
+  // Approve borrower - ON-CHAIN IMPLEMENTATION
   const approveBorrower = async (loanId, borrowerCommitment) => {
     try {
-      console.log('✅ Approving borrower for loan:', loanId);
+      console.log('👍 Approving borrower for loan:', loanId);
       console.log('📝 Borrower commitment:', borrowerCommitment);
       
-      // For now, just update via backend API
-      // TODO: Integrate with smart contract later
-      const response = await axios.post('http://localhost:3000/api/loan/approve-borrower', {
-        loanId,
-        borrowerCommitment,
-        lenderAddress: walletAddress
+      // Get connected wallet
+      const starknet = await connect();
+      if (!starknet || !starknet.account) {
+        throw new Error('Wallet not connected');
+      }
+
+      const provider = new RpcProvider({ 
+        nodeUrl: import.meta.env.VITE_STARKNET_RPC || 'https://starknet-sepolia.public.blastapi.io'
       });
 
-      console.log('✅ Borrower approved:', response.data);
-      
-      // Reload applications
-      await loadApplications(loanId);
-      await loadMyLoans();
+      // Loan Escrow ZK ABI for approve_borrower
+      const loanEscrowAbi = [
+        {
+          name: 'approve_borrower',
+          type: 'function',
+          inputs: [
+            { name: 'loan_id', type: 'u256' },
+            { name: 'borrower_commitment', type: 'felt252' }
+          ],
+          outputs: [],
+          stateMutability: 'external'
+        }
+      ];
 
-      alert('✅ Borrower approved! Loan activated.');
+      const loanEscrowContract = new Contract(
+        loanEscrowAbi,
+        LOAN_ESCROW_ADDRESS,
+        starknet.account
+      );
+
+      // Convert loan_id to u256
+      const loanIdU256 = uint256.bnToUint256(BigInt(loanId));
+
+      console.log('📊 Approval parameters:', {
+        loan_id: loanIdU256,
+        borrower_commitment: borrowerCommitment
+      });
+
+      // Call approve_borrower on-chain
+      const approvalCalldata = CallData.compile({
+        loan_id: loanIdU256,
+        borrower_commitment: borrowerCommitment
+      });
+
+      const approveTx = await loanEscrowContract.invoke('approve_borrower', approvalCalldata);
+      
+      console.log('⏳ Waiting for approval tx:', approveTx.transaction_hash);
+      const receipt = await provider.waitForTransaction(approveTx.transaction_hash);
+      console.log('✅ Borrower approved on blockchain!', receipt);
+
+      // Reload data
+      await loadMyLoans();
+      await loadApplications(selectedLoan);
+
+      alert('✅ Borrower approved! STRK transferred to borrower.\nTransaction: ' + approveTx.transaction_hash);
     } catch (error) {
       console.error('❌ Approval failed:', error);
-      alert('Failed to approve borrower: ' + (error.response?.data?.error || error.message));
+      alert('Failed to approve borrower: ' + (error.message || error));
     }
   };
 
@@ -578,20 +634,28 @@ const LoanLenderFlow = () => {
                   
                   <div className="loan-details">
                     <div className="detail-row">
-                      <span>💰 Amount:</span>
-                      <strong>{loan.amount} STRK</strong>
+                      <span>💰 Amount per Borrower:</span>
+                      <strong>{(parseFloat(loan.amountPerBorrower) / 1e18).toFixed(2)} STRK</strong>
                     </div>
                     <div className="detail-row">
-                      <span>👥 Borrowers:</span>
-                      <strong>{loan.approvedCount}/{loan.maxBorrowers}</strong>
+                      <span>👥 Slots:</span>
+                      <strong>{loan.filledSlots}/{loan.totalSlots}</strong>
                     </div>
                     <div className="detail-row">
                       <span>📈 Interest:</span>
-                      <strong>{loan.interestRate}%</strong>
+                      <strong>{(parseFloat(loan.interestRate) / 100).toFixed(2)}%</strong>
                     </div>
                     <div className="detail-row">
-                      <span>📬 Applications:</span>
-                      <strong>{loan.applicationCount || 0}</strong>
+                      <span>⏰ Repayment Period:</span>
+                      <strong>{Math.floor(loan.repaymentPeriod / 60)}min</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>📊 Min Score:</span>
+                      <strong>{loan.minActivityScore}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>🕐 Created:</span>
+                      <strong>{new Date(loan.createdAt).toLocaleString()}</strong>
                     </div>
                   </div>
 
@@ -599,7 +663,7 @@ const LoanLenderFlow = () => {
                     onClick={() => loadApplications(loan.id)}
                     className="btn-secondary btn-block"
                   >
-                    👀 View Applications
+                    👀 View Applications ({loan.filledSlots} pending)
                   </button>
                 </div>
               ))}

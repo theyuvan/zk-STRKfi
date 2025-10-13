@@ -61,7 +61,7 @@ class ProofController {
    */
   async generateProof(req, res) {
     try {
-      let { salary, threshold, salt } = req.body;
+      let { salary, threshold, salt, walletAddress, identityCommitment } = req.body;
 
       if (!salary || !threshold) {
         return res.status(400).json({
@@ -69,33 +69,70 @@ class ProofController {
         });
       }
 
-      // Generate salt if not provided
-      if (!salt) {
-        salt = crypto.randomBytes(32).toString('hex');
-        logger.info('Generated salt for proof', { hasSalt: true });
+      // Use wallet address or default
+      if (!walletAddress) {
+        walletAddress = '123456789012345678901234567890';
       }
 
-      // Generate commitment
-      const commitment = await zkService.generateCommitment(salary, salt);
+      // ===== IDENTITY COMMITMENT SYSTEM =====
+      // The identity commitment is PERMANENT and doesn't change
+      // It's calculated ONCE on first registration: Poseidon(initial_score, wallet, salt)
+      // For ALL future proofs, we reuse this SAME commitment for applications
+      // This allows lenders to see all applications from same borrower
+      // 
+      // The actual proof can have DIFFERENT scores (for credit score updates)
+      // but applications always use the SAME identity commitment
+      
+      // Always use deterministic salt from wallet address
+      const saltHash = crypto.createHash('sha256')
+        .update(walletAddress + '_identity_v1')
+        .digest('hex');
+      salt = saltHash;
 
-      // Prepare inputs
-      const inputs = zkService.prepareIncomeProofInputs(salary, threshold, salt);
+      // Generate current proof commitment (with current score)
+      const currentCommitmentBigInt = await zkService.poseidonHash([
+        BigInt(salary),
+        BigInt(walletAddress),
+        BigInt('0x' + salt)
+      ]);
+      const currentCommitment = '0x' + BigInt(currentCommitmentBigInt).toString(16);
 
-      // Generate proof
+      // If no identity commitment provided, use current as identity (first time)
+      const finalIdentityCommitment = identityCommitment || currentCommitment;
+
+      logger.info('� Identity system', { 
+        hasExistingIdentity: !!identityCommitment,
+        identityCommitment: finalIdentityCommitment.slice(0, 20) + '...',
+        currentCommitment: currentCommitment.slice(0, 20) + '...',
+        sameAsIdentity: finalIdentityCommitment === currentCommitment,
+        walletAddress: walletAddress.slice(0, 20) + '...'
+      });
+
+      // Prepare inputs for the circuit
+      const inputs = zkService.prepareIncomeProofInputs(salary, threshold, salt, walletAddress);
+
+      logger.info('Circuit inputs prepared:', inputs);
+
+      // Generate proof using real Groth16 circuit
       const { proof, publicSignals } = await zkService.generateProof(inputs);
 
-      // Generate proof hash for on-chain storage
-      const proofHash = crypto.createHash('sha256')
+      // Generate proof hash for on-chain storage (truncated to fit felt252)
+      const proofHashFull = crypto.createHash('sha256')
         .update(JSON.stringify(proof))
         .digest('hex');
+      
+      // Truncate to 63 hex chars (252 bits) to fit in felt252
+      const proofHash = '0x' + proofHashFull.slice(0, 63);
 
       // Format for contract submission
       const formattedProof = zkService.exportProofForContract(proof, publicSignals);
 
       logger.info('ZK proof generated', {
         threshold,
+        activityScore: salary,
         publicSignalsCount: publicSignals.length,
-        proofHash: proofHash.substring(0, 16) + '...'
+        proofHash: proofHash.substring(0, 20) + '...',
+        identityCommitment: finalIdentityCommitment.slice(0, 20) + '...'
       });
 
       res.json({
@@ -103,12 +140,15 @@ class ProofController {
         proof: formattedProof,
         publicSignals,
         rawProof: proof,
-        commitment,
+        commitment: currentCommitment, // Current proof commitment (changes with score)
+        identityCommitment: finalIdentityCommitment, // PERMANENT identity (never changes)
+        commitmentHash: finalIdentityCommitment, // For applications - use identity!
         proofHash,
-        salt
+        salt,
+        activityScore: salary
       });
     } catch (error) {
-      logger.error('Generate proof failed', { error: error.message });
+      logger.error('Generate proof failed', { error: error.message, stack: error.stack });
       res.status(500).json({ error: error.message });
     }
   }
