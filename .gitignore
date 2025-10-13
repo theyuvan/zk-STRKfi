@@ -9,7 +9,7 @@ logs/
 # Build outputs
 dist/
 build/
-contracts/zk/build/
+
 contracts/artifacts/
 contracts/cache/
 contracts/starknet/target/
