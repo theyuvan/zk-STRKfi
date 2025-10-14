@@ -314,26 +314,16 @@ const LoanBorrowerFlow = () => {
         commitmentHex: commitmentHex
       });
 
-      // Convert to BigInt
+      // Convert to BigInt (NO MASKING - backend already ensures correct size)
+      // Backend truncates to 63 hex chars which naturally fits in felt252
       let proofHashNum = BigInt('0x' + proofHashHex);
       let commitmentNum = BigInt('0x' + commitmentHex);
 
-      // CRITICAL: Mask to ensure value fits in felt252 (max = 2^251 - 1)
-      // Even 63 hex chars can exceed this limit if high bits are set
-      const FELT252_MAX = (BigInt(2) ** BigInt(251)) - BigInt(1);
-      if (proofHashNum > FELT252_MAX) {
-        console.log('⚠️ proofHash exceeds felt252 max, masking...');
-        proofHashNum = proofHashNum & FELT252_MAX; // Bitwise AND to fit in range
-      }
-      if (commitmentNum > FELT252_MAX) {
-        console.log('⚠️ commitment exceeds felt252 max, masking...');
-        commitmentNum = commitmentNum & FELT252_MAX;
-      }
-
-      console.log('✅ Values after masking:', {
+      console.log('✅ Commitment values (no masking):', {
         proofHashNum: proofHashNum.toString(),
         commitmentNum: commitmentNum.toString(),
-        withinRange: proofHashNum <= FELT252_MAX && commitmentNum <= FELT252_MAX
+        proofHashHex: '0x' + proofHashHex,
+        commitmentHex: '0x' + commitmentHex
       });
 
       // Use num.toHex() to ensure proper felt252 format for starknet.js validation
@@ -556,18 +546,10 @@ const LoanBorrowerFlow = () => {
       const proofHashHex = cleanHex(proofHashFelt);
       const commitmentHex = cleanHex(commitmentFelt);
 
-      // Convert to BigInt
+      // Convert to BigInt (NO MASKING - just use truncated hex as-is)
+      // Backend already truncated to 63 chars, which fits in felt252
       let proofHashNum = BigInt('0x' + proofHashHex);
       let commitmentNum = BigInt('0x' + commitmentHex);
-
-      // CRITICAL: Mask to ensure value fits in felt252 (max = 2^251 - 1)
-      const FELT252_MAX = (BigInt(2) ** BigInt(251)) - BigInt(1);
-      if (proofHashNum > FELT252_MAX) {
-        proofHashNum = proofHashNum & FELT252_MAX;
-      }
-      if (commitmentNum > FELT252_MAX) {
-        commitmentNum = commitmentNum & FELT252_MAX;
-      }
 
       // Use num.toHex() for proper felt252 format
       const proofHashFeltFormatted = num.toHex(proofHashNum);
