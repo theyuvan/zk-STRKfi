@@ -9,7 +9,7 @@ import './LoanLenderFlow.css';
 const LENDER_PASSWORD = '12345678';
 // ✅ Updated to use new contract addresses from .env
 const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS || 
-  '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+  '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 const STRK_TOKEN_ADDRESS = import.meta.env.VITE_STRK_TOKEN_ADDRESS || 
   '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 
@@ -477,7 +477,7 @@ const LoanLenderFlow = () => {
       });
 
       const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS || 
-        '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+        '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 
       // First, check the application status from backend to confirm it's overdue
       const appResponse = await axios.get(

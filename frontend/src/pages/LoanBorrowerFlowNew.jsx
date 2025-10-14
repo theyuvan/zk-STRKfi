@@ -8,7 +8,7 @@ import './LoanBorrowerFlowNew.css';
 
 // ✅ Updated to use new contract addresses from .env
 const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS || 
-  '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+  '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 const STRK_TOKEN_ADDRESS = import.meta.env.VITE_STRK_TOKEN_ADDRESS || 
   '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d';
 
@@ -313,6 +313,12 @@ const LoanBorrowerFlow = () => {
       // Convert activity score to u256
       const activityScoreU256 = uint256.bnToUint256(BigInt(activityData.score));
 
+      console.log('🔍 VERIFIER ADDRESS CHECK:', {
+        ACTIVITY_VERIFIER_ADDRESS,
+        isCorrect: ACTIVITY_VERIFIER_ADDRESS === '0x071b94eb84b81868b61fb0ec1bbb59df47bb508583bc79325e5fa997ee3eb4be',
+        connectedWallet: starknet.selectedAddress
+      });
+
       console.log('Registering proof with params:', {
         proof_hash_hex: proofHashFelt,
         proof_hash_decimal: proofHashNum.toString(),
@@ -328,10 +334,10 @@ const LoanBorrowerFlow = () => {
           contractAddress: ACTIVITY_VERIFIER_ADDRESS,
           entrypoint: 'register_proof',
           calldata: [
-            proofHashFelt,         // felt252 as hex string (starknet.js will convert)
-            commitmentFelt,        // felt252 as hex string
-            activityScoreU256.low, // u256.low (already a BigInt from bnToUint256)
-            activityScoreU256.high // u256.high (already a BigInt)
+            proofHashNum.toString(),         // felt252 as decimal string
+            commitmentNum.toString(),        // felt252 as decimal string
+            activityScoreU256.low.toString(), // u256.low as string
+            activityScoreU256.high.toString() // u256.high as string
           ]
         });
 
@@ -473,7 +479,7 @@ const LoanBorrowerFlow = () => {
       ];
 
       const LOAN_ESCROW_ADDRESS = import.meta.env.VITE_LOAN_ESCROW_ZK_ADDRESS || 
-        '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+        '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 
       const loanEscrowContract = new Contract(
         loanEscrowAbi,
@@ -568,6 +574,18 @@ const LoanBorrowerFlow = () => {
     try {
       console.log('💸 Repaying loan:', loan.loanId);
       
+      // DEBUG: Verify contract addresses are loaded
+      console.log('🔍 Contract addresses check:', {
+        LOAN_ESCROW_ADDRESS,
+        STRK_TOKEN_ADDRESS,
+        escrowDefined: !!LOAN_ESCROW_ADDRESS,
+        strkDefined: !!STRK_TOKEN_ADDRESS
+      });
+      
+      if (!LOAN_ESCROW_ADDRESS || !STRK_TOKEN_ADDRESS) {
+        throw new Error('Contract addresses not loaded from .env file. Please restart frontend.');
+      }
+      
       const starknet = await connect();
       const provider = new RpcProvider({ 
         nodeUrl: import.meta.env.VITE_STARKNET_RPC 
@@ -588,6 +606,13 @@ const LoanBorrowerFlow = () => {
       console.log('📝 Approving STRK spending...');
       const amountUint256 = uint256.bnToUint256(repaymentWei);
       
+      console.log('📤 APPROVE TRANSACTION DETAILS:', {
+        tokenAddress: STRK_TOKEN_ADDRESS,
+        spender: LOAN_ESCROW_ADDRESS,
+        amount_low: amountUint256.low.toString(),
+        amount_high: amountUint256.high.toString()
+      });
+      
       const approveTx = await starknet.account.execute({
         contractAddress: STRK_TOKEN_ADDRESS,
         entrypoint: 'approve',
@@ -606,12 +631,45 @@ const LoanBorrowerFlow = () => {
       console.log('💰 Calling repay_loan on contract...');
       const loanIdU256 = uint256.bnToUint256(BigInt(loan.loanId));
       
+      // Get borrower commitment from localStorage
+      const borrowerCommitment = localStorage.getItem('zkCommitment');
+      if (!borrowerCommitment) {
+        throw new Error('ZK commitment not found. Please regenerate your ZK proof.');
+      }
+      
+      console.log('🔑 Using commitment:', borrowerCommitment.slice(0, 20) + '...');
+      
+      // CRITICAL DEBUG: Log exactly what we're sending to the contract
+      console.log('📤 REPAY TRANSACTION DETAILS:', {
+        contractAddress: LOAN_ESCROW_ADDRESS,
+        contractAddressType: typeof LOAN_ESCROW_ADDRESS,
+        contractAddressDefined: !!LOAN_ESCROW_ADDRESS,
+        entrypoint: 'repay_loan',
+        calldata: {
+          loanId_low: loanIdU256.low.toString(),
+          loanId_high: loanIdU256.high.toString(),
+          commitment: borrowerCommitment
+        }
+      });
+      
+      if (!LOAN_ESCROW_ADDRESS || LOAN_ESCROW_ADDRESS === 'undefined') {
+        throw new Error(
+          '🚨 LOAN_ESCROW_ADDRESS is not defined!\n\n' +
+          'The .env file is not loaded. Please:\n' +
+          '1. Stop frontend (Ctrl+C)\n' +
+          '2. Delete node_modules\\.vite folder\n' +
+          '3. Restart: npm run dev\n' +
+          '4. Clear browser cache and reload'
+        );
+      }
+      
       const repayTx = await starknet.account.execute({
         contractAddress: LOAN_ESCROW_ADDRESS,
         entrypoint: 'repay_loan',
         calldata: [
           loanIdU256.low.toString(),
-          loanIdU256.high.toString()
+          loanIdU256.high.toString(),
+          borrowerCommitment  // Add the commitment parameter
         ]
       });
       
