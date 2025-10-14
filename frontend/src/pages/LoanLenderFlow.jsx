@@ -386,6 +386,9 @@ const LoanLenderFlow = () => {
     try {
       console.log('📬 Loading applications for loan:', loanId);
       const response = await axios.get(`http://localhost:3000/api/loan/${loanId}/applications`);
+      console.log('📦 Applications response:', response.data);
+      console.log('📊 Applications array:', response.data.applications);
+      console.log('📈 Total applications:', (response.data.applications || []).length);
       setApplications(response.data.applications || []);
       setSelectedLoan(loanId);
     } catch (error) {
@@ -546,16 +549,22 @@ const LoanLenderFlow = () => {
         `http://localhost:3000/api/loan/${loanId}/reveal/${borrowerCommitment}`
       );
       
-      const borrowerAddress = revealResponse.data.borrower || app.borrower || 'Unknown';
+      // ✅ CORRECTED: Show COMMITMENT (ZK identity), NOT wallet address
+      // The commitment is the borrower's permanent ZK identity that proves who they are
+      // This is what lenders use to track reputation across loans
+      const borrowerIdentity = revealResponse.data.commitment || borrowerCommitment;
+      const borrowerWallet = revealResponse.data.borrower || app.borrower;
 
       alert(
         `🔓 Borrower Identity Revealed!\n\n` +
-        `Wallet Address: ${borrowerAddress}\n` +
-        `Loan ID: ${loanId}\n` +
-        `Overdue by: ${daysOverdue} days\n` +
-        `Transaction: ${revealTx.transaction_hash.slice(0, 10)}...\n\n` +
+        `🔒 ZK Identity (Commitment): ${borrowerIdentity.slice(0, 20)}...${borrowerIdentity.slice(-16)}\n` +
+        `📍 Wallet Address: ${borrowerWallet}\n` +
+        `📋 Loan ID: ${loanId}\n` +
+        `⏰ Overdue by: ${daysOverdue} days\n` +
+        `📝 Transaction: ${revealTx.transaction_hash.slice(0, 10)}...\n\n` +
         `⚠️ The borrower failed to repay within the deadline.\n` +
-        `✅ Identity revealed on-chain via smart contract.`
+        `✅ Identity revealed on-chain via smart contract.\n` +
+        `💡 The ZK Identity Commitment is the borrower's permanent identity used for reputation tracking.`
       );
 
       // Reload applications to update UI
@@ -573,6 +582,25 @@ const LoanLenderFlow = () => {
       fetchActivityData();
     }
   }, [walletConnected, walletAddress]);
+
+  // Auto-refresh loans and applications every 30 seconds
+  useEffect(() => {
+    if (!zkProofGenerated || !walletAddress) return;
+
+    // Initial load
+    loadMyLoans();
+
+    // Set up polling interval
+    const interval = setInterval(() => {
+      loadMyLoans();
+      // Also refresh applications if viewing a loan
+      if (selectedLoan) {
+        loadApplications(selectedLoan);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [zkProofGenerated, walletAddress, selectedLoan]);
 
   // Render: Password Gate
   if (!passwordEntered) {
@@ -789,7 +817,16 @@ const LoanLenderFlow = () => {
 
         {/* My Loans */}
         <div className="loans-section">
-          <h2>📋 My Loans ({myLoans.length})</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2>📋 My Loans ({myLoans.length})</h2>
+            <button 
+              onClick={loadMyLoans} 
+              className="btn-secondary"
+              style={{ fontSize: '0.9rem', padding: '0.5rem 1rem' }}
+            >
+              🔄 Refresh
+            </button>
+          </div>
           
           {myLoans.length === 0 ? (
             <div className="empty-state">
@@ -897,7 +934,17 @@ const LoanLenderFlow = () => {
             </div>
             
             {applications.length === 0 ? (
-              <p className="empty-state">No applications yet</p>
+              <div className="empty-state">
+                <p>📭 No applications found for this loan</p>
+                <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '10px' }}>
+                  💡 If a borrower applied but it's not showing:
+                </p>
+                <ul style={{ textAlign: 'left', maxWidth: '500px', margin: '10px auto', fontSize: '0.85rem', color: '#888' }}>
+                  <li>Borrower may need to re-verify identity (Stage 1)</li>
+                  <li>Wait 30 seconds for auto-refresh, or click "🔄 Refresh"</li>
+                  <li>Check that application transaction was confirmed</li>
+                </ul>
+              </div>
             ) : (
               <div className="applications-list">
                 {applications

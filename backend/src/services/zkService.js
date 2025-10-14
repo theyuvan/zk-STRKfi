@@ -19,10 +19,15 @@ const logger = require('../utils/logger');
 class ZKService {
   constructor() {
     this.poseidon = null;
-    // Circuit files are in backend/src/zk/ (copied from contracts/zk/build/)
+    // Activity verification circuit files
     this.wasmPath = path.join(__dirname, '../zk/activityVerifier.wasm');
     this.zkeyPath = path.join(__dirname, '../zk/activityVerifier_final.zkey');
     this.vkeyPath = path.join(__dirname, '../zk/verification_key.json');
+    
+    // Identity verification circuit files
+    this.idWasmPath = path.join(__dirname, '../zk/idAuth.wasm');
+    this.idZkeyPath = path.join(__dirname, '../zk/idAuth_final.zkey');
+    this.idVkeyPath = path.join(__dirname, '../zk/verification_key_id.json');
   }
 
   /**
@@ -207,6 +212,94 @@ class ZKService {
     return await this.poseidonHash(proofElements.map(e => 
       typeof e === 'string' ? BigInt(e) : e
     ));
+  }
+
+  /**
+   * Generate identity verification proof
+   * @param {object} identityData - Identity document data
+   * @returns {object} Proof and public outputs
+   */
+  async generateIdentityProof(identityData) {
+    try {
+      await this.initialize();
+      
+      const {
+        passport_number,
+        address_hash,
+        dob_timestamp,
+        document_photo_hash,
+        salt,
+        wallet_address,
+        current_timestamp
+      } = identityData;
+
+      // Prepare circuit inputs
+      const inputs = {
+        passport_number: passport_number.toString(),
+        address_hash: address_hash.toString(),
+        dob_timestamp: dob_timestamp.toString(),
+        document_photo_hash: document_photo_hash.toString(),
+        salt: salt.toString(),
+        wallet_address: wallet_address.toString(),
+        current_timestamp: current_timestamp.toString()
+      };
+
+      logger.info('Generating identity verification proof', {
+        dob_timestamp,
+        current_timestamp,
+        age_seconds: current_timestamp - dob_timestamp
+      });
+
+      // Use fullProve which combines witness generation and proving
+      const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+        inputs,
+        this.idWasmPath,
+        this.idZkeyPath
+      );
+
+      // Verify proof locally
+      const vkey = JSON.parse(await fs.readFile(this.idVkeyPath, 'utf8'));
+      const verified = await snarkjs.groth16.verify(vkey, publicSignals, proof);
+
+      if (!verified) {
+        throw new Error('Identity proof verification failed');
+      }
+
+      logger.info('Identity proof generated and verified', {
+        identity_commitment: publicSignals[0],
+        age_verified: publicSignals[1],
+        wallet_commitment: publicSignals[2]
+      });
+
+      return {
+        proof,
+        publicSignals,
+        identity_commitment: publicSignals[0],
+        age_verified: publicSignals[1] === '1',
+        wallet_commitment: publicSignals[2],
+        verified: true
+      };
+    } catch (error) {
+      logger.error('Failed to generate identity proof', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Prepare identity proof inputs from document service data
+   * @param {object} processedData - Data from documentService.processIdentityDocument()
+   * @returns {object} Circuit inputs ready for proof generation
+   */
+  prepareIdentityProofInputs(processedData) {
+    return {
+      passport_number: processedData.passport_number_felt,
+      address_hash: processedData.address_felt,
+      dob_timestamp: processedData.dob_timestamp,
+      document_photo_hash: processedData.document_hash_felt,
+      salt: processedData.salt,
+      wallet_address: processedData.wallet_felt,
+      current_timestamp: Math.floor(Date.now() / 1000)
+    };
   }
 }
 

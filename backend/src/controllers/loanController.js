@@ -363,7 +363,7 @@ exports.getLoansByLender = async (req, res) => {
 
     // Contract addresses
     const loanEscrowAddress = process.env.LOAN_ESCROW_ZK_ADDRESS || 
-      '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+      '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 
     logger.info(`📍 [BLOCKCHAIN-V3] Contract address: ${loanEscrowAddress}`);
 
@@ -465,13 +465,75 @@ exports.getLoansByLender = async (req, res) => {
 exports.getLoanApplications = async (req, res) => {
   try {
     const { loanId } = req.params;
+    const { Contract, RpcProvider, hash } = require('starknet');
 
-    // For now, return empty array since we need commitment to query applications
-    // Applications will be tracked when borrowers apply
+    logger.info(`📬 Fetching applications for loan ${loanId}...`);
+
+    // Initialize provider
+    const provider = new RpcProvider({
+      nodeUrl: process.env.STARKNET_RPC_URL || 'https://starknet-sepolia.public.blastapi.io/rpc/v0_7'
+    });
+
+    // Contract address
+    const loanEscrowAddress = process.env.LOAN_ESCROW_ZK_ADDRESS || 
+      '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
+
+    // Load ABI
+    const loanEscrowAbi = require('../contracts/loan_escrow_zk_abi.json');
+
+    // Create contract instance
+    const contract = new Contract(loanEscrowAbi, loanEscrowAddress, provider);
+
+    // Get loan details first
+    const loanDetails = await contract.get_loan(loanId);
+    
+    // Query LoanApplicationSubmitted events for this loan_id
+    const eventKey = hash.getSelectorFromName('LoanApplicationSubmitted');
+    
+    logger.info(`🔍 Querying events with key: ${eventKey} for loan ${loanId}`);
+    
+    // Get events from the contract
+    const events = await provider.getEvents({
+      address: loanEscrowAddress,
+      keys: [[eventKey], [loanId]], // Filter by event type and loan_id
+      from_block: { block_number: 0 },
+      to_block: 'latest',
+      chunk_size: 100
+    });
+
+    logger.info(`📦 Found ${events.events.length} application events`);
+
+    // Parse events to extract applications
+    const applications = events.events.map(event => {
+      // Event structure: [loan_id, commitment, borrower, proof_hash]
+      const loan_id = event.keys[1];
+      const commitment = event.keys[2];
+      const borrower = event.data[0];
+      const proof_hash = event.data[1];
+
+      return {
+        loanId: loan_id,
+        commitment,
+        borrower,
+        proofHash: proof_hash,
+        blockNumber: event.block_number,
+        transactionHash: event.transaction_hash
+      };
+    });
+
+    logger.info(`✅ Returning ${applications.length} applications for loan ${loanId}`);
+
     res.json({
       success: true,
       loanId,
-      applications: []
+      loanDetails: {
+        lender: loanDetails.lender,
+        amount: loanDetails.amount.toString(),
+        interestRate: loanDetails.interest_rate,
+        minActivityScore: loanDetails.min_activity_score.toString()
+      },
+      applications,
+      message: applications.length === 0 ? 'No applications found for this loan' : undefined
     });
 
   } catch (error) {
@@ -498,7 +560,7 @@ exports.getAvailableLoans = async (req, res) => {
 
     // Contract addresses
     const loanEscrowAddress = process.env.LOAN_ESCROW_ZK_ADDRESS || 
-      '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+      '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 
     // Load ABI
     const loanEscrowAbi = require('../contracts/loan_escrow_zk_abi.json');

@@ -3,6 +3,7 @@ import { connect, disconnect } from 'get-starknet';
 import { Contract, RpcProvider, uint256, CallData, hash, num } from 'starknet';
 import StarkNetService from '../services/starknetService';
 import { getActivityData } from '../utils/activityScoreCalculator';
+import IdentityUpload from '../components/IdentityUpload';
 import axios from 'axios';
 import './LoanBorrowerFlowNew.css';
 
@@ -86,13 +87,28 @@ const LoanBorrowerFlow = () => {
   const [walletAddress, setWalletAddress] = useState('');
   const [strkBalance, setStrkBalance] = useState('0');
 
-  // Activity & ZK state
+  // Identity verification state (Stage 1)
+  const [identityVerified, setIdentityVerified] = useState(false);
+  const [identityCommitment, setIdentityCommitment] = useState(null);
+
+  // Activity & ZK state (Stage 2)
   const [activityData, setActivityData] = useState(null);
   const [zkProofGenerated, setZkProofGenerated] = useState(false);
   const [zkProof, setZkProof] = useState(null);
   
-  // Load saved commitment from localStorage on mount
+  // Load saved data from localStorage on mount
   useEffect(() => {
+    // Check identity verification
+    const savedIdentityCommitment = localStorage.getItem('identityCommitment');
+    const savedIdentityVerified = localStorage.getItem('identityVerified');
+    
+    if (savedIdentityCommitment && savedIdentityVerified === 'true') {
+      console.log('📦 Loaded saved identity commitment from localStorage');
+      setIdentityCommitment(savedIdentityCommitment);
+      setIdentityVerified(true);
+    }
+
+    // Check activity ZK proof
     const savedCommitment = localStorage.getItem('zkCommitment');
     const savedProofHash = localStorage.getItem('zkProofHash');
     const savedActivityScore = localStorage.getItem('zkActivityScore');
@@ -166,6 +182,16 @@ const LoanBorrowerFlow = () => {
     }
   };
 
+  // Step 1.5: Handle Identity Verification Completion
+  const handleIdentityVerified = (data) => {
+    console.log('✅ Identity verified:', data);
+    setIdentityCommitment(data.commitment);
+    setIdentityVerified(true);
+    
+    // Auto-fetch activity data after identity verification
+    fetchActivityData();
+  };
+
   // Step 3: Generate ZK Proof
   const generateZKProof = async () => {
     try {
@@ -183,12 +209,13 @@ const LoanBorrowerFlow = () => {
       // ===== STEP 1: Get or retrieve identity commitment =====
       // Identity commitment is PERMANENT and stored on first proof generation
       // It never changes even when activity score updates
-      let identityCommitment = localStorage.getItem('identityCommitment');
+      // USE THE REACT STATE, not localStorage directly!
+      const currentIdentityCommitment = identityCommitment; // Use state from Stage 1
       
-      if (identityCommitment) {
-        console.log('✅ Found existing identity commitment:', identityCommitment.slice(0, 20) + '...');
+      if (currentIdentityCommitment) {
+        console.log('✅ Found existing identity commitment:', currentIdentityCommitment.slice(0, 20) + '...');
       } else {
-        console.log('🆕 First time - will create new identity commitment');
+        console.log('⚠️ WARNING: No identity commitment found! Did you complete Stage 1?');
       }
       
       // ===== STEP 2: Generate proof with backend (includes current score) =====
@@ -196,7 +223,7 @@ const LoanBorrowerFlow = () => {
         salary: activityData.score,
         threshold: 100,
         walletAddress: walletAddress,
-        identityCommitment: identityCommitment || undefined // Pass existing identity if we have it
+        identityCommitment: currentIdentityCommitment // Pass identity from Stage 1
       };
 
       const response = await axios.post('http://localhost:3000/api/proof/generate', proofRequest);
@@ -204,10 +231,12 @@ const LoanBorrowerFlow = () => {
       console.log('✅ Backend proof response:', response.data);
 
       // ===== STEP 3: Save identity commitment on FIRST proof generation =====
-      if (!identityCommitment && response.data.identityCommitment) {
-        identityCommitment = response.data.identityCommitment;
-        localStorage.setItem('identityCommitment', identityCommitment);
-        console.log('💾 Saved NEW identity commitment:', identityCommitment.slice(0, 20) + '...');
+      // This should NEVER happen if user completed Stage 1 properly
+      if (!currentIdentityCommitment && response.data.identityCommitment) {
+        const newIdentityCommitment = response.data.identityCommitment;
+        localStorage.setItem('identityCommitment', newIdentityCommitment);
+        setIdentityCommitment(newIdentityCommitment); // Update state too
+        console.log('💾 Saved NEW identity commitment:', newIdentityCommitment.slice(0, 20) + '...');
       }
 
       // Map backend response to expected format
@@ -215,16 +244,24 @@ const LoanBorrowerFlow = () => {
       const truncatedIdentityCommitment = response.data.identityCommitment.slice(0, 65);
       const truncatedCommitment = response.data.commitment.slice(0, 65);
       
+      console.log('🔍 Commitment analysis:', {
+        identityCommitment: truncatedIdentityCommitment,
+        activityCommitment: truncatedCommitment,
+        same: truncatedIdentityCommitment === truncatedCommitment,
+        identityLength: truncatedIdentityCommitment.length,
+        activityLength: truncatedCommitment.length
+      });
+      
       const zkProofData = {
         ...response.data,
-        commitmentHash: truncatedIdentityCommitment, // Use IDENTITY for applications (65 chars)
-        commitment: truncatedCommitment, // Current proof commitment (65 chars)
-        identityCommitment: truncatedIdentityCommitment // Permanent identity (65 chars)
+        commitmentHash: truncatedCommitment, // ✅ ACTIVITY commitment for applications (changes with score)
+        commitment: truncatedCommitment, // Activity proof commitment (changes with score)
+        identityCommitment: truncatedIdentityCommitment // ✅ PERMANENT identity (only for reveal)
       };
 
       setZkProof(zkProofData);
-      console.log('🎯 Identity commitment (for applications):', response.data.identityCommitment.slice(0, 20) + '...');
-      console.log('📝 Current proof commitment:', response.data.commitment.slice(0, 20) + '...');
+      console.log('📊 Activity commitment (for applications):', response.data.commitment.slice(0, 20) + '...');
+      console.log('🆔 Identity commitment (for reveal only):', response.data.identityCommitment.slice(0, 20) + '...');
       console.log('ZK proof data stored:', zkProofData);
 
       // ===== STEP 2: Register proof on-chain =====
@@ -347,15 +384,20 @@ const LoanBorrowerFlow = () => {
         await provider.waitForTransaction(registerTx.transaction_hash);
         console.log('Proof registered on-chain!');
         
-        // CRITICAL: Truncate commitment to 65 chars (63 hex chars after 0x) to match contract felt252
-        // The backend expects 65-char commitments
-        const truncatedCommitment = zkProofData.commitmentHash.slice(0, 65);
+        // CRITICAL: Save ACTIVITY COMMITMENT (for applications), not identity commitment
+        // zkProofData.commitmentHash = activity commitment (used for loan applications)
+        // zkProofData.identityCommitment = permanent identity (only revealed on default)
+        const activityCommitment = zkProofData.commitmentHash.slice(0, 65);
         
         // Save to localStorage for persistence
-        localStorage.setItem('zkCommitment', truncatedCommitment);
+        localStorage.setItem('zkCommitment', activityCommitment);
         localStorage.setItem('zkProofHash', zkProofData.proofHash);
         localStorage.setItem('zkActivityScore', activityData.score.toString());
-        console.log('💾 Saved ZK proof to localStorage (commitment truncated to 65 chars)');
+        localStorage.setItem('identityCommitment', zkProofData.identityCommitment.slice(0, 65)); // Store separately
+        console.log('💾 Saved ACTIVITY commitment to localStorage:', activityCommitment.slice(0, 20) + '...');
+        console.log('🆔 Saved IDENTITY commitment separately:', zkProofData.identityCommitment.slice(0, 20) + '...');
+        console.log('📊 Activity commitment will be used for loan applications');
+        console.log('🔒 Identity commitment will ONLY be revealed on loan default');
         
         alert('✅ Proof registered successfully! Transaction: ' + registerTx.transaction_hash.slice(0, 10) + '...');
       } catch (txError) {
@@ -739,26 +781,68 @@ const LoanBorrowerFlow = () => {
     );
   }
 
-  // Render: Activity Fetch
-  if (!activityData) {
+  // Render: Identity Verification (Stage 1)
+  if (!identityVerified) {
     return (
       <div className="borrower-flow">
-        <div className="loading-section">
-          <div className="spinner"></div>
-          <h2>📊 Fetching Activity Data...</h2>
-          <p>Analyzing your wallet activity</p>
-          <p className="wallet-address">Wallet: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</p>
+        <div className="identity-section">
+          <div className="dashboard-header" style={{ marginBottom: '30px' }}>
+            <h1>🆔 Stage 1: Identity Verification</h1>
+            <p className="wallet-info">
+              {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)} | 
+              💰 {strkBalance} STRK
+            </p>
+          </div>
+          
+          <IdentityUpload 
+            walletAddress={walletAddress}
+            onIdentityVerified={handleIdentityVerified}
+          />
+          
+          <div className="info-box" style={{ marginTop: '20px' }}>
+            <h4>🔐 Two-Stage Privacy Protection</h4>
+            <p>✅ Stage 1 (Current): Upload identity documents - generates identity_commitment</p>
+            <p>⏳ Stage 2 (Next): Generate activity score proof - generates activity_commitment</p>
+            <p>🚀 Stage 3 (Final): Apply for loans with both commitments</p>
+            <hr style={{ margin: '10px 0' }} />
+            <p>🛡️ Your documents are hashed and deleted immediately</p>
+            <p>🔒 Only your identity_commitment is stored locally</p>
+            <p>👁️ Lenders NEVER see your documents or personal details</p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Render: ZK Verification
+  // Render: Activity Fetch (Stage 2 preparation)
+  if (!activityData) {
+    return (
+      <div className="borrower-flow">
+        <div className="loading-section">
+          <div className="spinner"></div>
+          <h2>📊 Stage 2: Fetching Activity Data...</h2>
+          <p>Analyzing your wallet activity</p>
+          <p className="wallet-address">Wallet: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</p>
+          <div className="info-box" style={{ marginTop: '20px' }}>
+            <p>✅ Identity verified: {identityCommitment?.slice(0, 20)}...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render: ZK Verification (Stage 2)
   if (!zkProofGenerated) {
     return (
       <div className="borrower-flow">
         <div className="zk-section">
-          <h1>🔐 Zero-Knowledge Verification</h1>
+          <h1>🔐 Stage 2: Activity Score Verification</h1>
+          
+          <div className="info-box" style={{ marginBottom: '20px' }}>
+            <p>✅ Stage 1 Complete: Identity verified</p>
+            <p>🔒 Identity Commitment: {identityCommitment?.slice(0, 20)}...{identityCommitment?.slice(-20)}</p>
+          </div>
+          
           <div className="activity-summary">
             <h3>Your Activity Summary</h3>
             <div className="stat-grid">
@@ -769,6 +853,11 @@ const LoanBorrowerFlow = () => {
               <div className="stat-card">
                 <span className="stat-label">Transactions</span>
                 <span className="stat-value">{activityData.txCount}</span>
+                <span className="stat-hint" style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                  {activityData.metrics?.nonce > 0 
+                    ? `${activityData.metrics.nonce} total on-chain`
+                    : `${activityData.metrics?.transferCount || 0} STRK transfers`}
+                </span>
               </div>
               <div className="stat-card">
                 <span className="stat-label">Activity Score</span>
@@ -778,37 +867,43 @@ const LoanBorrowerFlow = () => {
           </div>
           
           <button onClick={generateZKProof} className="btn-primary btn-large">
-            🔐 Generate ZK Proof & Enter Dashboard
+            🔐 Generate Activity Proof & Enter Dashboard
           </button>
           
           <div className="info-box">
-            <p>🛡️ Your identity will remain private</p>
-            <p>✨ Lenders will only see your commitment hash</p>
+            <p>🛡️ Your activity data will be proven with ZK</p>
+            <p>✨ Lenders will only see your activity_commitment hash</p>
+            <p>🔒 Your identity_commitment will be sent with loan applications</p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Render: Main Dashboard
+  // Render: Main Dashboard (Stage 3 - Ready to Apply)
   return (
     <div className="borrower-flow">
       <div className="dashboard">
         {/* Header */}
         <div className="dashboard-header">
           <div>
-            <h1>💼 Borrower Dashboard</h1>
+            <h1>💼 Borrower Dashboard (Stage 3: Ready to Apply)</h1>
             <p className="wallet-info">
               {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)} | 
               💰 {strkBalance} STRK | 
               📊 Score: {activityData.score}
             </p>
             <p className="commitment-hash">
-              🔒 Your Commitment: {zkProof?.commitmentHash ? `${zkProof.commitmentHash.slice(0, 10)}...${zkProof.commitmentHash.slice(-8)}` : 'Not generated'}
+              🆔 Identity (Reveal Only): {zkProof?.identityCommitment ? `${zkProof.identityCommitment.slice(0, 10)}...${zkProof.identityCommitment.slice(-8)}` : identityCommitment ? `${identityCommitment.slice(0, 10)}...${identityCommitment.slice(-8)}` : 'Not verified'}
+              <span style={{ fontSize: '11px', color: '#888', marginLeft: '8px' }}>🔒 Private until default</span>
+            </p>
+            <p className="commitment-hash">
+              📊 Activity (Applications): {zkProof?.commitmentHash ? `${zkProof.commitmentHash.slice(0, 10)}...${zkProof.commitmentHash.slice(-8)}` : 'Not generated'}
+              <span style={{ fontSize: '11px', color: '#888', marginLeft: '8px' }}>📤 Sent with each application</span>
               {zkProof && (
                 <button 
                   onClick={() => {
-                    if (window.confirm('⚠️ Regenerating proof will create a NEW identity. Your previous applications will NOT be accessible. Continue?')) {
+                    if (window.confirm('⚠️ Regenerating proof will create a NEW activity commitment. Your active loans will still be tracked by identity commitment. Continue?')) {
                       localStorage.removeItem('zkCommitment');
                       localStorage.removeItem('zkProofHash');
                       localStorage.removeItem('zkActivityScore');

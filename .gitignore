@@ -91,6 +91,52 @@ RUNNING_STATUS.md
 CURRENT_STATUS.md
 BUILD_STATUS.md
 
+# ===== TEMPORARY DOCUMENTATION FILES (Development/Debugging) =====
+# Generated during development - not needed in production
+*_FIX.md
+*_FIX_*.md
+*_FIXED.md
+*_FIXES_*.md
+*_GUIDE.md
+*_COMPLETE.md
+*_SUMMARY.md
+*_STATUS.md
+*_IMPLEMENTATION.md
+*_CHECKLIST.md
+*_ANALYSIS.md
+*_INSTRUCTIONS.md
+*_TESTING.md
+*_SUCCESS.md
+*_READINESS.md
+*_APPLIED.md
+*_WORKAROUND.md
+QUICKSTART*.md
+QUICK_*.md
+TEST_*.md
+CHECK_*.md
+WHATS_NEXT.md
+GIT_READY.md
+READY_TO_TEST.md
+SOLUTION_APPLIED.md
+TROUBLESHOOTING.md
+DIAGNOSTIC_REPORT.md
+MANUAL_DEPLOYMENT.md
+WSL_DEPLOYMENT_GUIDE.md
+
+# Keep only essential docs
+!README.md
+!LICENSE
+!INSTALLATION.md
+!docs/architecture.md
+!docs/security.md
+!docs/integration.md
+!backend/README.md
+!frontend/README.md
+!contracts/README.md
+!contracts/zk/README.md
+!offchain/README.md
+!offchain/trustees/trustee_onboarding.md
+
 # Scripts with potential credentials
 setup_credentials.sh
 setup_keystore.*
@@ -98,6 +144,23 @@ create_keystore.*
 deploy_*.sh
 auto_deploy.sh
 make_test_transactions.*
+
+# ===== BUILD AND TEST ARTIFACTS =====
+# Test scripts and deployment batches
+*.bat
+*.ps1
+test-*.js
+test-*.ps1
+!scripts/**/*.sh
+!scripts/**/*.bat
+!contracts/deploy/*.js
+
+# ===== NODE_MODULES AND DEPENDENCIES =====
+# Keep package.json and package-lock.json
+!package.json
+!package-lock.json
+!**/package.json
+!**/package-lock.json
 
 # Deployment batch/PowerShell scripts
 deploy-contracts.bat

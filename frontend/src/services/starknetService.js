@@ -299,11 +299,16 @@ export class StarkNetService {
       const totalReceived = receivedTxs.reduce((sum, tx) => sum + tx.valueInStrk, 0);
 
       // Calculate activity score components
+      // Use nonce (total transactions sent by wallet) as primary txCount
+      // Fall back to STRK transfer events if nonce is 0
+      const actualTxCount = nonce > 0 ? nonce : transactions.length;
+      
       const metrics = {
         // Raw data
         balance: parseFloat(balance.formatted),
-        txCount: transactions.length,
-        nonce,
+        txCount: actualTxCount, // ✅ USE NONCE for actual transaction count
+        transferCount: transactions.length, // STRK transfers only
+        nonce, // Keep raw nonce for debugging
         totalVolume,
         totalSent,
         totalReceived,
@@ -326,6 +331,12 @@ export class StarkNetService {
       };
 
       console.log('✅ Activity metrics calculated:', metrics);
+      console.log('📊 Transaction count breakdown:', {
+        nonce: nonce,
+        strkTransfers: transactions.length,
+        finalTxCount: actualTxCount,
+        source: nonce > 0 ? 'wallet nonce' : 'STRK transfers'
+      });
 
       return metrics;
     } catch (error) {

@@ -20,7 +20,7 @@
 
 ### Smart Contracts (StarkNet Sepolia) - DEPLOYED ✅
 ```
-✅ LoanEscrowZK: 0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d
+✅ LoanEscrowZK: 0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012
 ✅ ActivityVerifier: 0x071b94eb84b81868b61fb0ec1bbb59df47bb508583bc79325e5fa997ee3eb4be
 ✅ STRK Token: 0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
 ```
@@ -390,7 +390,7 @@ Monitor for:
 
 ### Blockchain Explorer (StarkScan)
 View transactions:
-- https://sepolia.starkscan.co/contract/0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d
+- https://sepolia.starkscan.co/contract/0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012
 
 Check for:
 - `create_loan_offer` calls

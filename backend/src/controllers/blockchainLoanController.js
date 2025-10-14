@@ -23,7 +23,7 @@ exports.getLoansByLender = async (req, res) => {
 
     // Contract addresses
     const loanEscrowAddress = process.env.LOAN_ESCROW_ZK_ADDRESS || 
-      '0x05a4d3ed7d102ab91715c2b36c70b5e9795a3e917214dbd9af40503d2c29f83d';
+      '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
 
     logger.info(`📍 [BLOCKCHAIN] Contract address: ${loanEscrowAddress}`);
 

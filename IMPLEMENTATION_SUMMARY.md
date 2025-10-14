@@ -7,6 +7,39 @@ Complete implementation of a two-sided loan marketplace with:
 - **Zero-Knowledge Privacy**: Both lender and borrower identities protected
 - **Dynamic Data**: No database/localStorage - all data from blockchain events
 - **Multi-Borrower Loans**: Single loan can serve multiple borrowers
+- **Real Transaction Activity**: Activity scores based on actual on-chain transactions ✨ NEW
+
+---
+
+## 🆕 Latest Updates: Real Transaction-Based Activity Scores
+
+### What's New:
+- ✅ **Transaction Fetcher Service**: Fetches real transactions from Blast API RPC
+- ✅ **Sent/Received Separation**: Transactions categorized by type
+- ✅ **Weighted Scoring Algorithm**: Volume (40%) + Frequency (30%) + Diversity (20%) + Recency (10%)
+- ✅ **Activity API Endpoints**: 3 new endpoints for activity data
+- ✅ **TransactionHistory Component**: Beautiful UI for displaying transaction history
+- ✅ **Lender View Refresh**: Manual refresh button to see updated loan status
+
+### Files Created:
+1. `backend/src/services/transactionFetcher.js` - Real transaction fetcher
+2. `backend/src/routes/activityRoutes.js` - Activity API endpoints
+3. `frontend/src/components/TransactionHistory.jsx` - Transaction history UI
+4. `frontend/src/components/TransactionHistory.css` - Component styling
+5. `INTEGRATION_GUIDE.md` - Complete integration instructions
+6. `test-activity-api.ps1` - PowerShell testing script
+
+### Quick Start:
+```powershell
+# 1. Restart backend
+cd backend
+npm start
+
+# 2. Test API
+http://localhost:3000/api/activity/0x22083c8b84ffd614c26468f2ada0c1baad4df98d81a0e1d7d757beb0155dd2d
+
+# 3. See INTEGRATION_GUIDE.md for full details
+```
 
 ---
 
