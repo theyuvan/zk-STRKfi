@@ -849,7 +849,24 @@ const LoanLenderFlow = () => {
         {/* Applications View */}
         {selectedLoan && (
           <div className="applications-section">
-            <h2>📬 Applications for Loan #{selectedLoan}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2>📬 Applications for Loan #{selectedLoan}</h2>
+              <button 
+                className="refresh-button"
+                onClick={() => loadApplications(selectedLoan)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                🔄 Refresh from Blockchain
+              </button>
+            </div>
             
             {/* Status Filter Tabs */}
             <div className="status-filters">
