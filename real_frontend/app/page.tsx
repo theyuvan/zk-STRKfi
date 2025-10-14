@@ -1,8 +1,9 @@
+'use client'
+
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import AnimatedHeading from "@/components/animated-heading"
 import RevealOnView from "@/components/reveal-on-view"
 import FeatureCard from "@/components/feature-card"
 import LightRays from "@/components/LightRays"
@@ -65,53 +66,50 @@ export default function Page() {
       </div>
 
       {/* Hero Section */}
-      <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-20 lg:py-32">
+      <section className="relative z-10 px-4 sm:px-6 lg:px-8 pt-32 pb-20 lg:pt-40 lg:pb-32">
         <div className="max-w-6xl mx-auto text-center">
-          <RevealOnView intensity="hero">
-            <div className="mb-4 flex items-center justify-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-purple-500" />
-            </div>
-            
-            <AnimatedHeading
-              className="text-5xl font-black leading-tight tracking-tight sm:text-6xl lg:text-7xl mb-6"
-              lines={["Privacy-Preserving", "Loans on StarkNet"]}
-            />
+          <div className="mb-4 flex items-center justify-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-purple-500" />
+          </div>
+          
+          <h1 className="text-5xl font-black leading-tight tracking-tight sm:text-6xl lg:text-7xl mb-6 text-white">
+            Privacy-Preserving<br />Loans on StarkNet
+          </h1>
 
-            <p className="mt-6 max-w-3xl mx-auto text-xl text-white/70 mb-8">
-              Borrow money without revealing your financial secrets. Zero-knowledge proofs verify your creditworthiness while keeping your data private.
-            </p>
+          <p className="mt-6 max-w-3xl mx-auto text-xl text-white/70 mb-8">
+            Borrow money without revealing your financial secrets. Zero-knowledge proofs verify your creditworthiness while keeping your data private.
+          </p>
 
-            {/* CTAs */}
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          {/* CTAs */}
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Button asChild size="lg" className="rounded-full bg-white text-black hover:bg-white/90">
                 <Link href="/wallet-analysis">
                   Get Started
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="rounded-full border-white/20 text-white hover:bg-white/10">
+              <Button asChild size="lg" variant="outline" className="rounded-full border-white/20 text-black hover:bg-white/10 hover:text-black bg-white">
                 <Link href="/how-it-works">
                   Learn More
                 </Link>
               </Button>
-            </div>
+          </div>
 
-            {/* Stats */}
-            <div className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
-              <div>
-                <div className="text-3xl font-bold text-white">100%</div>
-                <div className="text-sm text-white/50 mt-1">Private</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-white">Instant</div>
-                <div className="text-sm text-white/50 mt-1">Approval</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-white">0%</div>
-                <div className="text-sm text-white/50 mt-1">Data Leaks</div>
-              </div>
+          {/* Stats */}
+          <div className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
+            <div>
+              <div className="text-3xl font-bold text-white">100%</div>
+              <div className="text-sm text-white/50 mt-1">Private</div>
             </div>
-          </RevealOnView>
+            <div>
+              <div className="text-3xl font-bold text-white">Instant</div>
+              <div className="text-sm text-white/50 mt-1">Approval</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-white">0%</div>
+              <div className="text-sm text-white/50 mt-1">Data Leaks</div>
+            </div>
+          </div>
         </div>
       </section>
 

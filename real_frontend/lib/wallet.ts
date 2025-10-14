@@ -1,6 +1,6 @@
 'use client'
 
-import { connect, disconnect } from 'get-starknet-core'
+import { connect, disconnect } from '@starknet-io/get-starknet'
 import { AccountInterface } from 'starknet'
 
 export interface WalletState {
@@ -22,11 +22,17 @@ export async function connectWallet(): Promise<WalletState> {
       modalTheme: 'dark',
     })
 
-    if (!starknet || !starknet.isConnected) {
-      throw new Error('Failed to connect wallet')
+    if (!starknet) {
+      throw new Error('No StarkNet wallet detected. Please install Ready Wallet or Braavos.')
     }
 
+    // Enable the wallet connection
     await starknet.enable()
+
+    // Check if connection was successful
+    if (!starknet.isConnected) {
+      throw new Error('Wallet connection was rejected or failed')
+    }
 
     walletState = {
       address: starknet.selectedAddress || null,
@@ -35,8 +41,12 @@ export async function connectWallet(): Promise<WalletState> {
     }
 
     return walletState
-  } catch (error) {
+  } catch (error: any) {
     console.error('Wallet connection error:', error)
+    // Provide more specific error messages
+    if (error.message?.includes('User abort')) {
+      throw new Error('Connection cancelled by user')
+    }
     throw error
   }
 }

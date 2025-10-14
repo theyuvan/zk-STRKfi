@@ -23,9 +23,9 @@ export default function Navigation() {
 
   const navItems = [
     { name: 'Home', href: '/' },
-    { name: 'Analyze', href: '/wallet-analysis' },
-    { name: 'Dashboard', href: '/dashboard' },
+    { name: 'Borrowers', href: '/borrowers' },
     { name: 'Lenders', href: '/lenders' },
+    { name: 'Dashboard', href: '/dashboard' },
     { name: 'How It Works', href: '/how-it-works' },
   ]
 
