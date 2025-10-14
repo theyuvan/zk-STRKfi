@@ -12,6 +12,8 @@ contracts/artifacts/
 contracts/cache/
 contracts/starknet/target/
 *.zkey
+
+
 *.ptau
 *.r1cs
 *.wasm
