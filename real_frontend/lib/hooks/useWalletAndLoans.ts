@@ -124,7 +124,7 @@ export function useWalletAndLoans() {
       })
 
       onChainChanged(() => {
-        window.location.reload()
+        globalThis.location.reload()
       })
     }
 
