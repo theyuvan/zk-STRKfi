@@ -303,7 +303,7 @@ export default function LendersPage() {
       console.log('🏦 Creating loan offer...')
 
       // Get wallet connection
-      const starknet = (window as any).starknet
+      const starknet = (globalThis as any).starknet
       if (!starknet?.isConnected) {
         throw new Error('Wallet not connected')
       }
@@ -415,7 +415,7 @@ export default function LendersPage() {
       toast.loading('Approving borrower...', { id: 'approve' })
 
       // Get wallet connection
-      const starknet = (window as any).starknet
+      const starknet = (globalThis as any).starknet
       if (!starknet?.isConnected) {
         throw new Error('Wallet not connected')
       }
@@ -517,7 +517,7 @@ export default function LendersPage() {
       toast.loading('Revealing borrower identity...', { id: 'reveal' })
       
       // Get wallet connection
-      const starknet = (window as any).starknet
+      const starknet = (globalThis as any).starknet
       if (!starknet?.account) {
         toast.error('Please connect your wallet first', { id: 'reveal' })
         return
