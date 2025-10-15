@@ -79,7 +79,7 @@ export default function ZKProofDialog({
       })
 
       // Get wallet connection
-      const starknet = (window as any).starknet
+      const starknet = (globalThis as any).starknet
       if (!starknet?.isConnected) {
         throw new Error('Wallet not connected')
       }
@@ -121,7 +121,27 @@ export default function ZKProofDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-neutral-900 border-white/10 text-white max-w-md">
-        {!loanApproved ? (
+        {loanApproved ? (
+          <div className="text-center py-8">
+            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-10 h-10 text-green-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-green-400 mb-2">Loan Approved! 🎉</h3>
+            <p className="text-white/70 mb-4">
+              Your ZK proof has been verified successfully
+            </p>
+            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+              <p className="text-sm text-green-400 font-semibold mb-2">
+                {formatCurrency(loanAmount)} transferred to your wallet
+              </p>
+              {transactionHash && (
+                <p className="text-xs text-white/60 break-all">
+                  Transaction hash: {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-purple-400">
@@ -140,12 +160,7 @@ export default function ZKProofDialog({
                   <p className="text-white/80 font-semibold">Verifying ZK Proof on-chain...</p>
                   <p className="text-sm text-white/60 mt-2">Please confirm transaction in wallet</p>
                 </div>
-              ) : !proofData ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4" />
-                  <p className="text-white/80 font-semibold">Generating ZK Proof...</p>
-                </div>
-              ) : (
+              ) : proofData ? (
                 <>
                   <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
                     <p className="text-xs text-purple-400 mb-3 flex items-center gap-2">
@@ -167,46 +182,24 @@ export default function ZKProofDialog({
                     </p>
                   </div>
 
-                  <div className="p-4 rounded-lg bg-neutral-800/50 border border-white/10">
-                    <p className="text-xs text-white/60 mb-2">Identity Commitment</p>
-                    <p className="text-xs font-mono text-purple-400 break-all">
-                      {proofData.identityCommitment || 'N/A'}
-                    </p>
-                  </div>
-
-                  <Button
-                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                    onClick={handleSubmitZkProof}
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    Submit Proof & Request Loan
-                  </Button>
-                </>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-10 h-10 text-green-500" />
-            </div>
-            <h3 className="text-2xl font-bold text-green-400 mb-2">Loan Approved! 🎉</h3>
-            <p className="text-white/70 mb-4">
-              Your ZK proof has been verified successfully
-            </p>
-            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-              <p className="text-sm text-green-400 font-semibold mb-2">
-                {formatCurrency(loanAmount)} transferred to your wallet
-              </p>
-              {transactionHash && (
-                <p className="text-xs text-white/60 break-all">
-                  Transaction hash: {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
+                          <Button 
+                            onClick={handleSubmitZkProof}
+                            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                          >
+                            <Zap className="w-4 h-4 mr-2" />
+                            Submit ZK Proof & Apply
+                          </Button>
+                        </>
+                      ) : (
+                        <div className="text-center py-8">
+                          <div className="animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-4" />
+                          <p className="text-white/80 font-semibold">Generating ZK Proof...</p>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </DialogContent>
+            </Dialog>
+          )
 }
