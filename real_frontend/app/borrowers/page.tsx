@@ -1052,32 +1052,7 @@ export default function BorrowersPage() {
       {/* Main Content */}
       <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-7xl mx-auto">
-          {!walletAddress ? (
-            <Card className="bg-neutral-900/80 border-white/10 p-12 text-center">
-              <Wallet className="w-16 h-16 mx-auto mb-4 text-purple-500" />
-              <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
-              <p className="text-white/60 mb-6">
-                Connect your StarkNet wallet to get started
-              </p>
-              <Button
-                onClick={handleConnectStarkNet}
-                disabled={isConnecting}
-                className="bg-gradient-to-r from-purple-600 to-blue-600"
-              >
-                {isConnecting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="w-4 h-4 mr-2" />
-                    Connect StarkNet
-                  </>
-                )}
-              </Button>
-            </Card>
-          ) : (
+          {walletAddress ? (
             <Tabs value={currentStep} onValueChange={(v) => setCurrentStep(v as any)}>
               <TabsList className="grid w-full grid-cols-4 mb-8">
                 <TabsTrigger value="analyze">1. Analyze</TabsTrigger>
@@ -1204,7 +1179,36 @@ export default function BorrowersPage() {
                     <h2 className="text-2xl font-bold">Identity Verification</h2>
                   </div>
 
-                  {!identityVerified ? (
+                  {identityVerified ? (
+                    <div className="space-y-6">
+                      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                          <CheckCircle className="w-6 h-6 text-green-500" />
+                          <h3 className="text-xl font-bold text-green-500">Identity Verified!</h3>
+                        </div>
+                        <p className="text-white/60">
+                          Your identity has been verified with zero-knowledge proofs. Your data is
+                          secure and private.
+                        </p>
+                      </div>
+
+                      <Card className="bg-neutral-800/50 border-white/10 p-6">
+                        <h3 className="text-lg font-bold mb-4">Identity Commitment</h3>
+                        <p className="text-sm text-white/60 mb-2">Your unique identity hash:</p>
+                        <p className="text-white/90 font-mono text-xs break-all">
+                          {identityCommitment}
+                        </p>
+                      </Card>
+
+                      <Button
+                        onClick={() => setCurrentStep('loanProof')}
+                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600"
+                        size="lg"
+                      >
+                        Continue to Loan Proof Generation
+                      </Button>
+                    </div>
+                  ) : (
                     <div className="space-y-6 max-w-2xl mx-auto">
                       <p className="text-white/60 text-center">
                         Upload your identity document to verify your identity with zero-knowledge proofs
@@ -1270,8 +1274,8 @@ export default function BorrowersPage() {
                             <input
                               id="document"
                               type="file"
-                              onChange={handleFileChange}
                               accept="image/jpeg,image/jpg,image/png,application/pdf"
+                              onChange={handleFileChange}
                               className="hidden"
                             />
                           </div>
@@ -1287,11 +1291,11 @@ export default function BorrowersPage() {
                         {isVerifyingIdentity ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Verifying Identity...
+                            Verifying...
                           </>
                         ) : (
                           <>
-                            <FileText className="w-4 h-4 mr-2" />
+                            <Shield className="w-4 h-4 mr-2" />
                             Verify Identity
                           </>
                         )}
@@ -1300,35 +1304,6 @@ export default function BorrowersPage() {
                       <p className="text-xs text-white/40 text-center">
                         Your identity data is encrypted and used only for ZK proof generation
                       </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                          <CheckCircle className="w-6 h-6 text-green-500" />
-                          <h3 className="text-xl font-bold text-green-500">Identity Verified!</h3>
-                        </div>
-                        <p className="text-white/60">
-                          Your identity has been verified with zero-knowledge proofs. Your data is
-                          secure and private.
-                        </p>
-                      </div>
-
-                      <Card className="bg-neutral-800/50 border-white/10 p-6">
-                        <h3 className="text-lg font-bold mb-4">Identity Commitment</h3>
-                        <p className="text-sm text-white/60 mb-2">Your unique identity hash:</p>
-                        <p className="text-white/90 font-mono text-xs break-all">
-                          {identityCommitment}
-                        </p>
-                      </Card>
-
-                      <Button
-                        onClick={() => setCurrentStep('loanProof')}
-                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600"
-                        size="lg"
-                      >
-                        Continue to Loan Proof Generation
-                      </Button>
                     </div>
                   )}
                 </Card>
@@ -1342,73 +1317,73 @@ export default function BorrowersPage() {
                     <h2 className="text-2xl font-bold">Loan Application Proof</h2>
                   </div>
 
-                  {!loanZkProof ? (
-                    <div className="text-center py-8">
-                      <p className="text-white/60 mb-6">
-                        Generate a zero-knowledge proof to apply for loans anonymously
-                      </p>
-                      <Button
-                        onClick={generateLoanProof}
-                        disabled={isGeneratingLoanProof}
-                        className="bg-gradient-to-r from-purple-600 to-pink-600"
-                      >
-                        {isGeneratingLoanProof ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Generating Proof...
-                          </>
-                        ) : (
-                          <>
-                            <Shield className="w-4 h-4 mr-2" />
-                            Generate Loan Proof
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                          <CheckCircle className="w-6 h-6 text-green-500" />
-                          <h3 className="text-xl font-bold text-green-500">Proof Generated!</h3>
+                      {loanZkProof ? (
+                        <div className="space-y-6">
+                          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                              <CheckCircle className="w-6 h-6 text-green-500" />
+                              <h3 className="text-xl font-bold text-green-500">Proof Generated!</h3>
+                            </div>
+                            <p className="text-white/60">
+                              Your loan application proof is ready. You can now browse and apply for
+                              loans.
+                            </p>
+                          </div>
+    
+                          <Card className="bg-neutral-800/50 border-white/10 p-6">
+                            <h3 className="text-lg font-bold mb-4">Proof Details</h3>
+                            <div className="space-y-3 font-mono text-sm">
+                              <div>
+                                <p className="text-white/60 mb-1">Commitment</p>
+                                <p className="text-white/90 break-all">{loanZkProof.commitment}</p>
+                              </div>
+                              <div>
+                                <p className="text-white/60 mb-1">Commitment Hash</p>
+                                <p className="text-white/90 break-all">{loanZkProof.commitmentHash}</p>
+                              </div>
+                              <div>
+                                <p className="text-white/60 mb-1">Activity Score</p>
+                                <p className="text-white/90">{loanZkProof.activityScore}</p>
+                              </div>
+                            </div>
+                          </Card>
+    
+                          <Button
+                            onClick={() => {
+                              setCurrentStep('dashboard')
+                              fetchAvailableLoans()
+                              fetchMyActiveLoans()
+                            }}
+                            className="w-full bg-gradient-to-r from-purple-600 to-blue-600"
+                            size="lg"
+                          >
+                            Go to Loan Dashboard
+                          </Button>
                         </div>
-                        <p className="text-white/60">
-                          Your loan application proof is ready. You can now browse and apply for
-                          loans.
-                        </p>
-                      </div>
-
-                      <Card className="bg-neutral-800/50 border-white/10 p-6">
-                        <h3 className="text-lg font-bold mb-4">Proof Details</h3>
-                        <div className="space-y-3 font-mono text-sm">
-                          <div>
-                            <p className="text-white/60 mb-1">Commitment</p>
-                            <p className="text-white/90 break-all">{loanZkProof.commitment}</p>
-                          </div>
-                          <div>
-                            <p className="text-white/60 mb-1">Commitment Hash</p>
-                            <p className="text-white/90 break-all">{loanZkProof.commitmentHash}</p>
-                          </div>
-                          <div>
-                            <p className="text-white/60 mb-1">Activity Score</p>
-                            <p className="text-white/90">{loanZkProof.activityScore}</p>
-                          </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-white/60 mb-6">
+                            Generate a zero-knowledge proof to apply for loans anonymously
+                          </p>
+                          <Button
+                            onClick={generateLoanProof}
+                            disabled={isGeneratingLoanProof}
+                            className="bg-gradient-to-r from-purple-600 to-pink-600"
+                          >
+                            {isGeneratingLoanProof ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Generating Proof...
+                              </>
+                            ) : (
+                              <>
+                                <Shield className="w-4 h-4 mr-2" />
+                                Generate Loan Proof
+                              </>
+                            )}
+                          </Button>
                         </div>
-                      </Card>
-
-                      <Button
-                        onClick={() => {
-                          setCurrentStep('dashboard')
-                          fetchAvailableLoans()
-                          fetchMyActiveLoans()
-                        }}
-                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600"
-                        size="lg"
-                      >
-                        Go to Loan Dashboard
-                      </Button>
-                    </div>
-                  )}
+                      )}
                 </Card>
               </TabsContent>
 
@@ -1506,6 +1481,11 @@ export default function BorrowersPage() {
                 </div>
               </TabsContent>
             </Tabs>
+          ) : (
+            <div className="text-center py-20">
+              <Wallet className="w-12 h-12 mx-auto mb-4 text-white/40" />
+              <p className="text-white/60">Connect your wallet to view available loans</p>
+            </div>
           )}
         </div>
       </section>
@@ -1531,8 +1511,8 @@ function LoanCard({
   const repaymentAmount = loanAmountStrk + interestAmount
 
   return (
-    <Card className="bg-neutral-900/80 border-white/10 overflow-hidden hover:border-purple-500/50 transition-all">
-      <div className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 p-6 border-b border-white/10">
+    <Card className="bg-neutral-900/80 border-white/10 overflow-hidden">
+      <div className="p-6 border-b border-white/10">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xl font-bold">Loan #{loan.loanId}</h3>
           <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
@@ -1543,7 +1523,6 @@ function LoanCard({
           Lender: {loan.lender.slice(0, 10)}...{loan.lender.slice(-8)}
         </p>
       </div>
-
       <div className="p-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-neutral-800/50 rounded-lg p-4">
@@ -1574,9 +1553,7 @@ function LoanCard({
             <div className="flex items-center justify-between">
               <span className="text-sm text-white/60">Your Score</span>
               <span
-                className={`text-sm font-bold ${
-                  eligibility.eligible ? 'text-green-400' : 'text-red-400'
-                }`}
+                className={`text-sm font-bold ${eligibility.eligible ? 'text-green-400' : 'text-red-400'}`}
               >
                 {activityScore}
               </span>
