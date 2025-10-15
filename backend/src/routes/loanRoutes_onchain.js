@@ -166,18 +166,26 @@ router.get('/available', async (req, res) => {
         // Borrowers can still apply (pending), lender decides whether to approve
         if (loanDetails.status === 0) {
           const slotsRemaining = Number(loanDetails.total_slots) - Number(loanDetails.filled_slots);
+          const amountPerBorrower = loanDetails.amount_per_borrower.toString();
+          const interestRateBps = loanDetails.interest_rate_bps.toString();
+          const interestRate = Number(interestRateBps) / 100; // Convert bps to percentage
           
           loans.push({
-            id: i.toString(),
+            loanId: i.toString(), // Frontend expects loanId
+            id: i.toString(), // Keep for compatibility
             lender: loanDetails.lender,
-            amountPerBorrower: loanDetails.amount_per_borrower.toString(),
+            loanAmount: amountPerBorrower, // Frontend expects loanAmount
+            amountPerBorrower: amountPerBorrower, // Keep for compatibility
             totalSlots: Number(loanDetails.total_slots),
             filledSlots: Number(loanDetails.filled_slots),
             slotsRemaining: slotsRemaining,
-            interestRate: loanDetails.interest_rate_bps.toString(),
-            repaymentPeriod: loanDetails.repayment_period.toString(),
+            availableSlots: slotsRemaining,
+            interestRate: interestRate, // As number percentage (10 not "1000")
+            interestRateBps: interestRateBps, // Keep bps as string
+            repaymentPeriod: Number(loanDetails.repayment_period),
             minActivityScore: loanDetails.min_activity_score.toString(),
-            status: 'active',
+            status: 0,
+            isActive: true,
             createdAt: new Date(Number(loanDetails.created_at) * 1000).toISOString()
           });
           
@@ -230,7 +238,7 @@ router.get('/lender/:lenderAddress', async (req, res) => {
       const countValue = loanCountRaw.count;
       if (typeof countValue === 'bigint') {
         loanCount = Number(countValue);
-      } else if (countValue?.low !== undefined) {
+      } else if (countValue?.low) {
         loanCount = Number(countValue.low);
       } else {
         loanCount = Number(countValue);
@@ -280,17 +288,27 @@ router.get('/lender/:lenderAddress', async (req, res) => {
         
         // Filter by lender address
         if (loanDetails.lender.toLowerCase() === lenderAddress.toLowerCase()) {
+          const amountPerBorrower = loanDetails.amount_per_borrower.toString();
+          const interestRateBps = loanDetails.interest_rate_bps.toString();
+          const interestRate = Number(interestRateBps) / 100; // Convert bps to percentage
+          const slotsRemaining = Number(loanDetails.total_slots) - Number(loanDetails.filled_slots);
+          
           loans.push({
-            id: i.toString(),
+            loanId: i.toString(), // Frontend expects loanId
+            id: i.toString(), // Keep for compatibility
             lender: loanDetails.lender,
-            amountPerBorrower: loanDetails.amount_per_borrower.toString(),
+            loanAmount: amountPerBorrower, // Frontend expects loanAmount
+            amountPerBorrower: amountPerBorrower, // Keep for compatibility
             totalSlots: Number(loanDetails.total_slots),
             filledSlots: Number(loanDetails.filled_slots),
-            slotsRemaining: Number(loanDetails.total_slots) - Number(loanDetails.filled_slots),
-            interestRate: loanDetails.interest_rate_bps.toString(),
-            repaymentPeriod: loanDetails.repayment_period.toString(),
+            slotsRemaining: slotsRemaining,
+            availableSlots: slotsRemaining,
+            interestRate: interestRate, // As number percentage (10 not "1000")
+            interestRateBps: interestRateBps, // Keep bps as string
+            repaymentPeriod: Number(loanDetails.repayment_period),
             minActivityScore: loanDetails.min_activity_score.toString(),
-            status: loanDetails.status === 0 ? 'active' : loanDetails.status === 1 ? 'funded' : 'cancelled',
+            status: Number(loanDetails.status),
+            isActive: loanDetails.status === 0,
             createdAt: new Date(Number(loanDetails.created_at) * 1000).toISOString()
           });
           logger.info(`✅ [ONCHAIN-V1] Added loan ${i} to results`);
@@ -502,8 +520,8 @@ router.get('/:loanId/applications', async (req, res) => {
             approvedAt = appDetails.approved_at > 0 ? new Date(appDetails.approved_at * 1000).toISOString() : null;
             repaidAt = appDetails.repaid_at > 0 ? new Date(appDetails.repaid_at * 1000).toISOString() : null;
             repaymentDeadline = appDetails.repayment_deadline > 0 ? new Date(appDetails.repayment_deadline * 1000).toISOString() : null;
-          } catch (appErr) {
-            logger.warn('Could not fetch application details:', appErr.message);
+          } catch (error_) {
+            logger.warn('Could not fetch application details:', error_.message);
           }
 
           applications.push({

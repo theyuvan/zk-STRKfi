@@ -5,7 +5,7 @@
 
 const loanMonitor = require('../services/loanMonitor');
 const logger = require('../utils/logger');
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 
 /**
  * Apply for a loan
@@ -419,17 +419,25 @@ exports.getLoansByLender = async (req, res) => {
         
         // Check if this loan belongs to the lender
         if (normalizedLender === normalizedAddress) {
+          const amountPerBorrower = (loanDetails.amount_per_borrower || loanDetails[1])?.toString() || '0';
+          const interestRateBps = (loanDetails.interest_rate_bps || loanDetails[4])?.toString() || '0';
+          const minActivityScore = (loanDetails.min_activity_score || loanDetails[6])?.toString() || '0';
+          const interestRate = Number(interestRateBps) / 100;
+          
           const loanData = {
             loanId: i.toString(),
             lender: lenderAddr.toString(),
-            amountPerBorrower: (loanDetails.amount_per_borrower || loanDetails[1]).toString(),
-            totalSlots: Number(loanDetails.total_slots || loanDetails[2]),
-            filledSlots: Number(loanDetails.filled_slots || loanDetails[3]),
-            interestRateBps: (loanDetails.interest_rate_bps || loanDetails[4]).toString(),
-            repaymentPeriod: Number(loanDetails.repayment_period || loanDetails[5]),
-            minActivityScore: (loanDetails.min_activity_score || loanDetails[6]).toString(),
-            status: Number(loanDetails.status || loanDetails[7]),
-            createdAt: Number(loanDetails.created_at || loanDetails[8])
+            loanAmount: amountPerBorrower, // Frontend expects 'loanAmount'
+            amountPerBorrower: amountPerBorrower,
+            totalSlots: Number(loanDetails.total_slots || loanDetails[2]) || 0,
+            filledSlots: Number(loanDetails.filled_slots || loanDetails[3]) || 0,
+            interestRate: interestRate, // As percentage
+            interestRateBps: interestRateBps,
+            repaymentPeriod: Number(loanDetails.repayment_period || loanDetails[5]) || 0,
+            minActivityScore: minActivityScore,
+            status: Number(loanDetails.status || loanDetails[7]) || 0,
+            isActive: Number(loanDetails.status || loanDetails[7]) === 0,
+            createdAt: Number(loanDetails.created_at || loanDetails[8]) || Date.now()
           };
           
           logger.info(`✅ [BLOCKCHAIN-V3] Found matching loan ${i}:`, loanData);
@@ -599,18 +607,30 @@ exports.getAvailableLoans = async (req, res) => {
         // Only show active loans (status = 0) with available slots
         if (Number(loanDetails.status) === 0 && 
             Number(loanDetails.filled_slots) < Number(loanDetails.total_slots)) {
+          
+          // Parse the amount properly
+          const amountPerBorrower = loanDetails.amount_per_borrower?.toString() || '0';
+          const interestRateBps = loanDetails.interest_rate_bps?.toString() || '0';
+          const minActivityScore = loanDetails.min_activity_score?.toString() || '0';
+          
+          // Calculate interest rate as percentage (bps / 100)
+          const interestRate = Number(interestRateBps) / 100;
+          
           loans.push({
             loanId: i.toString(),
-            lender: loanDetails.lender,
-            amountPerBorrower: loanDetails.amount_per_borrower.toString(),
-            totalSlots: Number(loanDetails.total_slots),
-            filledSlots: Number(loanDetails.filled_slots),
-            availableSlots: Number(loanDetails.total_slots) - Number(loanDetails.filled_slots),
-            interestRateBps: loanDetails.interest_rate_bps.toString(),
-            repaymentPeriod: Number(loanDetails.repayment_period),
-            minActivityScore: loanDetails.min_activity_score.toString(),
-            status: Number(loanDetails.status),
-            createdAt: Number(loanDetails.created_at)
+            lender: loanDetails.lender?.toString() || '',
+            loanAmount: amountPerBorrower, // Frontend expects 'loanAmount'
+            amountPerBorrower: amountPerBorrower, // Keep for compatibility
+            totalSlots: Number(loanDetails.total_slots) || 0,
+            filledSlots: Number(loanDetails.filled_slots) || 0,
+            availableSlots: (Number(loanDetails.total_slots) || 0) - (Number(loanDetails.filled_slots) || 0),
+            interestRate: interestRate, // As percentage (e.g., 10 for 10%)
+            interestRateBps: interestRateBps, // Keep bps for reference
+            repaymentPeriod: Number(loanDetails.repayment_period) || 0,
+            minActivityScore: minActivityScore,
+            status: Number(loanDetails.status) || 0,
+            isActive: Number(loanDetails.status) === 0,
+            createdAt: Number(loanDetails.created_at) || Date.now()
           });
         }
       } catch (error) {
