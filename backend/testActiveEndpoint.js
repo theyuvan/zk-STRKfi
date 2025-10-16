@@ -28,13 +28,15 @@ async function testActiveLoansEndpoint() {
         console.log('  3. Backend error in parsing application data');
       } else {
         console.log('\n✅ Loans returned by backend:');
-        response.data.loans.forEach((loan, i) => {
-          console.log(`\n  Loan ${i + 1}:`);
+        let i = 0;
+        for (const loan of response.data.loans) {
+          i++;
+          console.log(`\n  Loan ${i}:`);
           console.log(`    ID: ${loan.loanId}`);
           console.log(`    Amount: ${(Number(loan.amount) / 1e18).toFixed(4)} STRK`);
           console.log(`    Status: ${loan.status}`);
           console.log(`    Deadline: ${loan.repaymentDeadline}`);
-        });
+        }
       }
     } else if (Array.isArray(response.data)) {
       console.log(`\n⚠️ Response is an array (old format), length: ${response.data.length}`);
@@ -57,12 +59,11 @@ async function testActiveLoansEndpoint() {
   }
 }
 
-testActiveLoansEndpoint()
-  .then(() => {
-    console.log('\n✅ Test complete\n');
-    process.exit(0);
-  })
-  .catch(error => {
-    console.error('\n❌ Test failed:', error);
-    process.exit(1);
-  });
+try {
+  await testActiveLoansEndpoint();
+  console.log('\n✅ Test complete\n');
+  process.exit(0);
+} catch (error) {
+  console.error('\n❌ Test failed:', error);
+  process.exit(1);
+}
