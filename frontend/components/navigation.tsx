@@ -46,7 +46,7 @@ export default function Navigation() {
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
             </div>
-            <span className="font-bold text-base text-white">Loanzy</span>
+            <span className="font-bold text-base text-white">zk-STRKfi</span>
           </Link>
 
           {/* Desktop Navigation */}
