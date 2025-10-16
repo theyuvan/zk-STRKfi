@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Wallet, Activity, Shield, FileText, Loader2, CheckCircle, XCircle, Upload, User } from 'lucide-react'
+import { ArrowLeft, Wallet, Activity, Shield, FileText, Loader2, CheckCircle, XCircle, Upload, User, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -458,26 +458,29 @@ export default function BorrowersPage() {
       // Check wallet balance first
       try {
         const provider = new RpcProvider({ nodeUrl: RPC_URL })
-        const ETH_TOKEN_ADDRESS = '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7'
+        // Use STRK token address (not ETH)
         const balance = await provider.callContract({
-          contractAddress: ETH_TOKEN_ADDRESS,
+          contractAddress: STRK_TOKEN_ADDRESS,
           entrypoint: 'balanceOf',
           calldata: [walletAddress]
         })
         const balanceStrk = parseFloat(uint256.uint256ToBN({ low: balance[0], high: balance[1] }).toString()) / 1e18
         
-        console.log('💰 Wallet balance:', balanceStrk, 'STRK')
+        console.log('💰 Wallet STRK balance:', balanceStrk, 'STRK')
+        console.log('📍 Checking token at:', STRK_TOKEN_ADDRESS)
         
         if (balanceStrk < 0.001) {
           toast.error(
-            '⚠️ Insufficient balance! You need STRK tokens for gas fees. Balance: ' + balanceStrk.toFixed(4) + ' STRK',
-            { id: 'loanProof', duration: 10000 }
+            '⚠️ Insufficient balance! You need STRK tokens for gas fees.\n\n' +
+            '💰 Current Balance: ' + balanceStrk.toFixed(4) + ' STRK\n' +
+            '🔗 Get free testnet tokens at: https://starknet-faucet.vercel.app/',
+            { id: 'loanProof', duration: 15000 }
           )
           return
         }
       } catch (balanceError) {
         console.warn('⚠️ Could not check balance:', balanceError)
-        // Continue anyway
+        // Continue anyway - user might have balance but RPC call failed
       }
 
       // Register proof on ActivityVerifier contract
@@ -1053,35 +1056,34 @@ export default function BorrowersPage() {
   }
 
   return (
-    <main className="bg-neutral-950 text-white min-h-screen pt-20">
+    <main className="bg-gradient-to-br from-neutral-900 via-neutral-950 to-black text-white min-h-screen pt-20">
       <Toaster position="top-right" />
 
       {/* Header */}
-      <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-8 border-b border-white/10">
+      <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-8 border-b border-white/20 bg-neutral-900/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button asChild variant="ghost" size="icon" className="rounded-full">
+              <Button asChild variant="ghost" size="icon" className="rounded-full hover:bg-white/10">
                 <Link href="/">
                   <ArrowLeft className="w-5 h-5" />
                 </Link>
               </Button>
               <div>
-                <h1 className="text-3xl font-black">Borrower Portal</h1>
-                <p className="text-white/60 mt-1">Get loans with privacy-preserving ZK proofs</p>
+                <h1 className="text-3xl font-black text-white">Borrower Portal</h1>
+                <p className="text-white/70 mt-1">Get loans with privacy-preserving ZK proofs</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
               {walletAddress ? (
                 <>
-                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                  <Badge className="bg-green-500/20 text-green-400 border-green-500/30 px-4 py-2 text-sm font-mono">
                     {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
                   </Badge>
                   <Button
                     onClick={handleDisconnect}
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5"
+                    className="bg-red-600 hover:bg-red-700 text-white font-medium px-6 py-2 rounded-lg shadow-lg border-0"
                   >
                     Disconnect
                   </Button>
@@ -1090,7 +1092,7 @@ export default function BorrowersPage() {
                 <Button
                   onClick={handleConnectStarkNet}
                   disabled={isConnecting}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-full"
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-full text-white font-medium"
                 >
                   {isConnecting ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1110,15 +1112,32 @@ export default function BorrowersPage() {
         <div className="max-w-7xl mx-auto">
           {walletAddress ? (
             <Tabs value={currentStep} onValueChange={(v) => setCurrentStep(v as any)}>
-              <TabsList className="grid w-full grid-cols-4 mb-8">
-                <TabsTrigger value="analyze">1. Analyze</TabsTrigger>
-                <TabsTrigger value="identity" disabled={activityScore === 0}>
+              <TabsList className="grid w-full grid-cols-4 mb-8 bg-neutral-800/50 p-2 rounded-lg border border-white/10">
+                <TabsTrigger 
+                  value="analyze"
+                  className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-white/70 font-medium"
+                >
+                  1. Analyze
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="identity" 
+                  disabled={activityScore === 0}
+                  className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-white/70 font-medium disabled:opacity-50"
+                >
                   2. Identity
                 </TabsTrigger>
-                <TabsTrigger value="loanProof" disabled={!identityVerified}>
+                <TabsTrigger 
+                  value="loanProof" 
+                  disabled={!identityVerified}
+                  className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-white/70 font-medium disabled:opacity-50"
+                >
                   3. Loan Proof
                 </TabsTrigger>
-                <TabsTrigger value="dashboard" disabled={!loanZkProof}>
+                <TabsTrigger 
+                  value="dashboard" 
+                  disabled={!loanZkProof}
+                  className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-white/70 font-medium disabled:opacity-50"
+                >
                   Dashboard
                 </TabsTrigger>
               </TabsList>
@@ -1128,7 +1147,7 @@ export default function BorrowersPage() {
                 <Card className="bg-neutral-900/80 border-white/10 p-8">
                   <div className="flex items-center gap-3 mb-6">
                     <Activity className="w-6 h-6 text-blue-500" />
-                    <h2 className="text-2xl font-bold">Wallet Activity Analysis</h2>
+                    <h2 className="text-2xl font-bold text-white">Wallet Activity Analysis</h2>
                   </div>
 
                   {activityScore === 0 ? (
@@ -1232,7 +1251,7 @@ export default function BorrowersPage() {
                 <Card className="bg-neutral-900/80 border-white/10 p-8">
                   <div className="flex items-center gap-3 mb-6">
                     <User className="w-6 h-6 text-purple-500" />
-                    <h2 className="text-2xl font-bold">Identity Verification</h2>
+                    <h2 className="text-2xl font-bold text-white">Identity Verification</h2>
                   </div>
 
                   {identityVerified ? (
@@ -1272,40 +1291,41 @@ export default function BorrowersPage() {
 
                       <div className="space-y-4">
                         <div>
-                          <Label htmlFor="passportNumber">Passport/ID Number</Label>
+                          <Label htmlFor="passportNumber" className="text-white font-medium">Passport/ID Number</Label>
                           <Input
                             id="passportNumber"
                             value={passportNumber}
                             onChange={(e) => setPassportNumber(e.target.value)}
                             placeholder="Enter passport or ID number"
-                            className="bg-neutral-800 border-white/10"
+                            className="bg-neutral-800 border-white/10 text-white placeholder:text-white/40"
                           />
                         </div>
 
                         <div>
-                          <Label htmlFor="address">Address</Label>
+                          <Label htmlFor="address" className="text-white font-medium">Address</Label>
                           <Input
                             id="address"
                             value={address}
                             onChange={(e) => setAddress(e.target.value)}
                             placeholder="Enter your address"
-                            className="bg-neutral-800 border-white/10"
+                            className="bg-neutral-800 border-white/10 text-white placeholder:text-white/40"
                           />
                         </div>
 
                         <div>
-                          <Label htmlFor="dob">Date of Birth</Label>
+                          <Label htmlFor="dob" className="text-white font-medium">Date of Birth</Label>
                           <Input
                             id="dob"
                             type="date"
                             value={dateOfBirth}
                             onChange={(e) => setDateOfBirth(e.target.value)}
-                            className="bg-neutral-800 border-white/10"
+                            placeholder="dd-mm-yyyy"
+                            className="bg-neutral-800 border-white/10 text-white placeholder:text-white/40"
                           />
                         </div>
 
                         <div>
-                          <Label htmlFor="document">Document Photo</Label>
+                          <Label htmlFor="document" className="text-white font-medium">Document Photo</Label>
                           <div className="mt-2">
                             <label
                               htmlFor="document"
@@ -1370,7 +1390,7 @@ export default function BorrowersPage() {
                 <Card className="bg-neutral-900/80 border-white/10 p-8">
                   <div className="flex items-center gap-3 mb-6">
                     <Shield className="w-6 h-6 text-purple-500" />
-                    <h2 className="text-2xl font-bold">Loan Application Proof</h2>
+                    <h2 className="text-2xl font-bold text-white">Loan Application Proof</h2>
                   </div>
 
                       {loanZkProof ? (
@@ -1417,10 +1437,32 @@ export default function BorrowersPage() {
                           </Button>
                         </div>
                       ) : (
-                        <div className="text-center py-8">
-                          <p className="text-white/60 mb-6">
+                        <div className="text-center py-8 space-y-4">
+                          <p className="text-white/60 mb-4">
                             Generate a zero-knowledge proof to apply for loans anonymously
                           </p>
+                          
+                          {/* Balance Warning */}
+                          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                              <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                              <div className="text-left">
+                                <h4 className="text-yellow-500 font-semibold mb-1">⚠️ STRK Tokens Required</h4>
+                                <p className="text-yellow-200/80 text-sm mb-2">
+                                  You need STRK tokens for gas fees to register your proof on-chain.
+                                </p>
+                                <a
+                                  href="https://starknet-faucet.vercel.app/"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 text-sm underline inline-flex items-center gap-1"
+                                >
+                                  Get free testnet STRK tokens →
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+
                           <Button
                             onClick={generateLoanProof}
                             disabled={isGeneratingLoanProof}
@@ -1461,10 +1503,10 @@ export default function BorrowersPage() {
                         onClick={fetchMyActiveLoans}
                         disabled={isLoadingActiveLoans}
                         variant="outline"
-                        className="border-green-500/30"
+                        className="border-green-500/30 bg-green-500/20 text-black hover:bg-green-500/30 hover:text-black font-medium"
                       >
                         {isLoadingActiveLoans ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin text-black" />
                         ) : (
                           'Check for Updates'
                         )}
@@ -1491,7 +1533,7 @@ export default function BorrowersPage() {
 
                   {/* AVAILABLE LOANS SECTION */}
                   <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold">Available Loan Offers</h2>
+                    <h2 className="text-2xl font-bold text-white">Available Loan Offers</h2>
                     <Button
                       onClick={() => {
                         fetchAvailableLoans()
@@ -1499,10 +1541,10 @@ export default function BorrowersPage() {
                       }}
                       disabled={isLoadingLoans}
                       variant="outline"
-                      className="border-white/10"
+                      className="border-blue-500/30 bg-blue-500/20 text-black hover:bg-blue-500/30 hover:text-black font-medium"
                     >
                       {isLoadingLoans ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin text-black" />
                       ) : (
                         'Refresh'
                       )}
@@ -1570,7 +1612,7 @@ function LoanCard({
     <Card className="bg-neutral-900/80 border-white/10 overflow-hidden">
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xl font-bold">Loan #{loan.loanId}</h3>
+          <h3 className="text-xl font-bold text-white">Loan #{loan.loanId}</h3>
           <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
             {loan.filledSlots}/{loan.totalSlots} Slots
           </Badge>
@@ -1581,33 +1623,33 @@ function LoanCard({
       </div>
       <div className="p-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-neutral-800/50 rounded-lg p-4">
-            <p className="text-xs text-white/60 mb-1">Loan Amount</p>
-            <p className="text-2xl font-bold">{loanAmountStrk.toFixed(2)} STRK</p>
+          <div className="bg-neutral-800/50 rounded-lg p-4 border border-white/5">
+            <p className="text-xs text-white/70 mb-1 font-medium">Loan Amount</p>
+            <p className="text-2xl font-bold text-white">{loanAmountStrk.toFixed(2)} STRK</p>
           </div>
-          <div className="bg-neutral-800/50 rounded-lg p-4">
-            <p className="text-xs text-white/60 mb-1">Interest Rate</p>
-            <p className="text-2xl font-bold">{loan.interestRate}%</p>
+          <div className="bg-neutral-800/50 rounded-lg p-4 border border-white/5">
+            <p className="text-xs text-white/70 mb-1 font-medium">Interest Rate</p>
+            <p className="text-2xl font-bold text-white">{loan.interestRate}%</p>
           </div>
-          <div className="bg-neutral-800/50 rounded-lg p-4">
-            <p className="text-xs text-white/60 mb-1">Repayment</p>
-            <p className="text-2xl font-bold">{repaymentAmount.toFixed(2)} STRK</p>
+          <div className="bg-neutral-800/50 rounded-lg p-4 border border-white/5">
+            <p className="text-xs text-white/70 mb-1 font-medium">Repayment</p>
+            <p className="text-2xl font-bold text-white">{repaymentAmount.toFixed(2)} STRK</p>
           </div>
-          <div className="bg-neutral-800/50 rounded-lg p-4">
-            <p className="text-xs text-white/60 mb-1">Duration</p>
-            <p className="text-2xl font-bold">{loan.repaymentPeriod.toLocaleString()} sec</p>
+          <div className="bg-neutral-800/50 rounded-lg p-4 border border-white/5">
+            <p className="text-xs text-white/70 mb-1 font-medium">Duration</p>
+            <p className="text-2xl font-bold text-white">{loan.repaymentPeriod.toLocaleString()} sec</p>
           </div>
         </div>
 
         <Card className="bg-blue-500/10 border-blue-500/30 p-4 mb-4">
-          <h4 className="text-sm font-semibold mb-3">Requirements</h4>
+          <h4 className="text-sm font-semibold text-blue-400 mb-3">Requirements</h4>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-white/60">Minimum Score</span>
-              <span className="text-sm font-bold">{loan.minActivityScore}</span>
+              <span className="text-sm text-white/70">Minimum Score</span>
+              <span className="text-sm font-bold text-white">{loan.minActivityScore}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-white/60">Your Score</span>
+              <span className="text-sm text-white/70">Your Score</span>
               <span
                 className={`text-sm font-bold ${eligibility.eligible ? 'text-green-400' : 'text-red-400'}`}
               >
@@ -1671,15 +1713,15 @@ function ActiveLoanCard({ loan, onRepay }: { loan: any; onRepay: (loan: any) => 
   const hoursLeft = Math.ceil(timeLeft / (1000 * 60 * 60))
 
   return (
-    <Card className="bg-gradient-to-br from-green-900/20 to-emerald-900/20 border-green-500/30 overflow-hidden">
-      <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 p-6 border-b border-green-500/30">
+    <Card className="bg-neutral-900/80 border-green-500/30 overflow-hidden">
+      <div className="bg-green-500/10 p-6 border-b border-green-500/30">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xl font-bold text-green-400">💰 Active Loan #{loan.loanId}</h3>
-          <Badge className="bg-green-500/30 text-green-300 border-green-500/50">
+          <Badge className="bg-green-500/20 text-green-300 border-green-500/40">
             Approved & Funded
           </Badge>
         </div>
-        <p className="text-white/60 text-sm font-mono">
+        <p className="text-white/70 text-sm font-mono">
           Lender: {loan.lender.slice(0, 10)}...{loan.lender.slice(-8)}
         </p>
       </div>
@@ -1687,38 +1729,38 @@ function ActiveLoanCard({ loan, onRepay }: { loan: any; onRepay: (loan: any) => 
       <div className="p-6">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-neutral-800/50 rounded-lg p-4 border border-green-500/20">
-            <p className="text-xs text-white/60 mb-1">Received Amount</p>
+            <p className="text-xs text-white/70 mb-1 font-medium">Received Amount</p>
             <p className="text-2xl font-bold text-green-400">{loanAmountStrk.toFixed(2)} STRK</p>
           </div>
           <div className="bg-neutral-800/50 rounded-lg p-4 border border-yellow-500/20">
-            <p className="text-xs text-white/60 mb-1">Must Repay</p>
+            <p className="text-xs text-white/70 mb-1 font-medium">Must Repay</p>
             <p className="text-2xl font-bold text-yellow-400">{repaymentAmount.toFixed(2)} STRK</p>
           </div>
           <div className="bg-neutral-800/50 rounded-lg p-4 border border-blue-500/20">
-            <p className="text-xs text-white/60 mb-1">Interest</p>
+            <p className="text-xs text-white/70 mb-1 font-medium">Interest</p>
             <p className="text-2xl font-bold text-blue-400">{interestRate.toFixed(1)}%</p>
           </div>
         </div>
 
         <Card className={`${daysLeft <= 1 ? 'bg-red-500/10 border-red-500/30' : 'bg-orange-500/10 border-orange-500/30'} p-4 mb-4`}>
-          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-white">
             ⏰ Repayment Deadline
           </h4>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-white/60">Approved On</span>
-              <span className="text-sm font-bold">
+              <span className="text-sm text-white/70">Approved On</span>
+              <span className="text-sm font-bold text-white">
                 {approvedDate.toLocaleDateString()} {approvedDate.toLocaleTimeString()}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-white/60">Deadline</span>
+              <span className="text-sm text-white/70">Deadline</span>
               <span className={`text-sm font-bold ${daysLeft <= 1 ? 'text-red-400' : 'text-orange-400'}`}>
                 {deadlineDate.toLocaleDateString()} {deadlineDate.toLocaleTimeString()}
               </span>
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-white/10">
-              <span className="text-sm text-white/60">Time Remaining</span>
+              <span className="text-sm text-white/70">Time Remaining</span>
               <span className={`text-lg font-bold ${daysLeft <= 1 ? 'text-red-400' : 'text-orange-400'}`}>
                 {daysLeft > 0 ? `${daysLeft} day${daysLeft > 1 ? 's' : ''}` : `${hoursLeft} hour${hoursLeft > 1 ? 's' : ''}`}
               </span>

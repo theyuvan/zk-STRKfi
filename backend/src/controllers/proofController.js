@@ -249,7 +249,7 @@ class ProofController {
 
       res.json({
         commitment,
-        salary: parseInt(salary),
+        salary: Number.parseInt(salary),
         message: 'Commitment generated successfully'
       });
     } catch (error) {

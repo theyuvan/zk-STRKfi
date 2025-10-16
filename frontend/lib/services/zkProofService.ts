@@ -21,9 +21,33 @@ export interface ZKProofData {
 
 export class ZKProofService {
   private apiUrl: string;
+  
+  // StarkNet prime for felt252 validation
+  private readonly PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
 
   constructor(apiUrl: string = 'http://localhost:3000') {
     this.apiUrl = apiUrl;
+  }
+
+  /**
+   * Validate and reduce a felt252 value to valid range
+   * @param value - Hex string or BigInt
+   * @returns Valid felt252 hex string
+   */
+  private toValidFelt252(value: string | bigint): string {
+    let bigIntValue: bigint;
+    
+    if (typeof value === 'string') {
+      const cleaned = value.startsWith('0x') ? value.slice(2) : value;
+      bigIntValue = BigInt('0x' + cleaned);
+    } else {
+      bigIntValue = value;
+    }
+    
+    // Reduce to valid range if needed
+    const reduced = bigIntValue % this.PRIME;
+    
+    return '0x' + reduced.toString(16);
   }
 
   /**
@@ -83,20 +107,20 @@ export class ZKProofService {
         }
       }
 
-      // Truncate commitments to 65 chars (felt252 limit)
-      const truncatedIdentityCommitment = data.identityCommitment.slice(0, 65);
-      const truncatedCommitment = data.commitment.slice(0, 65);
+      // Ensure all commitment values are valid felt252 (< PRIME)
+      const validIdentityCommitment = this.toValidFelt252(data.identityCommitment);
+      const validCommitment = this.toValidFelt252(data.commitment);
 
-      // Generate commitment hash for on-chain registration
+      // Generate commitment hash for on-chain registration (also validated)
       const commitmentHash = this.generateCommitmentHash(data.commitment);
       console.log('🔐 Generated commitment hash:', commitmentHash.slice(0, 20) + '...');
 
       const zkProofData: ZKProofData = {
         proof: data.proof,
         publicSignals: data.publicSignals,
-        commitment: truncatedCommitment, // Activity proof commitment (changes with score)
-        commitmentHash, // Hash of commitment for on-chain
-        identityCommitment: truncatedIdentityCommitment, // Permanent identity
+        commitment: validCommitment, // Activity proof commitment (changes with score)
+        commitmentHash, // Hash of commitment for on-chain (already validated)
+        identityCommitment: validIdentityCommitment, // Permanent identity
         salt: data.salt,
         activityScore,
         threshold,
@@ -119,20 +143,28 @@ export class ZKProofService {
 
   /**
    * Generate commitment hash using SHA256
-   * Truncates to 63 hex chars (felt252 limit)
+   * Properly reduces to felt252 range (< PRIME)
    */
   private generateCommitmentHash(commitment: string): string {
     // Remove '0x' prefix if present
     const cleanCommitment = commitment.startsWith('0x') ? commitment.slice(2) : commitment;
     
-    // Hash using SHA256
+    // Hash using SHA256 (256 bits)
     const hash = sha256(new TextEncoder().encode(cleanCommitment));
-    let hashHex = '0x' + bytesToHex(hash);
+    const hashBigInt = BigInt('0x' + bytesToHex(hash));
     
-    // Truncate to 63 hex chars (252 bits) for felt252
-    hashHex = hashHex.slice(0, 65); // 0x + 63 chars = 65 total
+    // Use helper to reduce to valid felt252 range
+    const validHash = this.toValidFelt252(hashBigInt);
     
-    return hashHex;
+    console.log('🔐 Commitment hash generation:', {
+      original: '0x' + bytesToHex(hash),
+      originalBits: hashBigInt.toString(2).length,
+      reduced: validHash,
+      reducedValue: BigInt(validHash),
+      isValid: BigInt(validHash) < this.PRIME
+    });
+    
+    return validHash;
   }
 
   /**
