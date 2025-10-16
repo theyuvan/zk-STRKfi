@@ -2,6 +2,7 @@ const zkService = require('../services/zkService');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
 const commitmentCache = require('../services/commitmentCacheService');
+const identityCommitmentStore = require('../services/identityCommitmentStore');
 
 /**
  * Controller for ZK proof generation and verification
@@ -140,6 +141,47 @@ class ProofController {
       // Cache this borrower's permanent identity so lenders can discover applications
       commitmentCache.addCommitment(finalIdentityCommitment);
       logger.info('💾 [CACHE] Commitment cached for future application discovery');
+
+      // ===== STORE ACTIVITY COMMITMENT IN JSON FILE =====
+      // This is the commitment used for loan applications (activity proof)
+      // We store it so we can map it back to the identity_commitment during reveal
+      try {
+        // First, check if there's an existing identity_commitment from Step 2
+        const existingData = await identityCommitmentStore.getCommitmentsByWallet(walletAddress);
+        
+        if (existingData && existingData.identity_commitment) {
+          // User already has identity_commitment from Step 2, preserve it
+          logger.info('✅ [STORE] Found existing identity_commitment, preserving it', {
+            wallet: walletAddress.slice(0, 10) + '...',
+            identity: existingData.identity_commitment.slice(0, 20) + '...'
+          });
+          
+          // Update only the activity_commitment
+          await identityCommitmentStore.storeActivityCommitment(
+            walletAddress,
+            finalIdentityCommitment // This is the activity commitment stored on-chain
+          );
+        } else {
+          // No identity_commitment yet (user skipped Step 2 or did it out of order)
+          // Just store the activity_commitment for now
+          logger.warn('⚠️ [STORE] No identity_commitment found for this wallet. User may not have completed identity verification.', {
+            wallet: walletAddress.slice(0, 10) + '...'
+          });
+          
+          await identityCommitmentStore.storeActivityCommitment(
+            walletAddress,
+            finalIdentityCommitment
+          );
+        }
+        
+        logger.info('💾 [STORE] Activity commitment saved to JSON file', {
+          wallet: walletAddress.slice(0, 10) + '...',
+          activity_commitment: finalIdentityCommitment.slice(0, 20) + '...'
+        });
+      } catch (storeError) {
+        logger.error('❌ [STORE] Failed to save activity commitment:', storeError.message);
+        // Don't fail the request if storage fails - just log it
+      }
 
       res.json({
         message: 'Proof generated successfully',

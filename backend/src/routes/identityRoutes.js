@@ -4,6 +4,7 @@ const identityController = require('../controllers/identityController');
 const documentService = require('../services/documentService');
 const zkService = require('../services/zkService');
 const commitmentCache = require('../services/commitmentCacheService');
+const identityCommitmentStore = require('../services/identityCommitmentStore');
 const logger = require('../utils/logger');
 
 // ====== STAGE 1: Document Verification (NEW) ======
@@ -93,10 +94,31 @@ router.post('/verify-document', documentService.upload.single('document'), async
       documentService.deleteDocument(req.file.path);
     }
     
-    res.status(500).json({
+    // Return detailed error response with validation info if available
+    const errorResponse = {
       success: false,
-      error: error.message
-    });
+      error: error.message || 'Identity verification failed'
+    };
+    
+    // Add validation details if this was a validation error
+    if (error.message && (
+      error.message.includes('MISMATCH') || 
+      error.message.includes('validation') ||
+      error.message.includes('could not be read')
+    )) {
+      errorResponse.validation = {
+        errors: [error.message],
+        warnings: [],
+        hints: [
+          'Ensure document is clear and well-lit',
+          'Check that entered data matches document exactly',
+          'Use original document (not photocopy)',
+          'Supported formats: JPEG, PNG, PDF (max 5MB)'
+        ]
+      };
+    }
+    
+    res.status(400).json(errorResponse);
   }
 });
 
@@ -143,6 +165,21 @@ router.post('/generate-proof', async (req, res) => {
     logger.info('✅ [CACHE] Identity commitment added', {
       commitment: proofResult.identity_commitment
     });
+
+    // ===== STORE IDENTITY COMMITMENT IN JSON FILE =====
+    try {
+      await identityCommitmentStore.storeIdentityCommitment(
+        identityInputs.wallet_address,
+        proofResult.identity_commitment
+      );
+      logger.info('💾 [STORE] Identity commitment saved to JSON file', {
+        wallet: identityInputs.wallet_address.slice(0, 10) + '...',
+        identity_commitment: proofResult.identity_commitment.slice(0, 20) + '...'
+      });
+    } catch (storeError) {
+      logger.error('❌ [STORE] Failed to save identity commitment:', storeError.message);
+      // Don't fail the request if storage fails - just log it
+    }
 
     res.json({
       success: true,

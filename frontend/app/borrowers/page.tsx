@@ -333,6 +333,24 @@ export default function BorrowersPage() {
       )
 
       console.log('📄 Document verified:', uploadResponse.data)
+      
+      // Show validation results if available
+      if (uploadResponse.data.metadata?.validation) {
+        const validation = uploadResponse.data.metadata.validation
+        console.log('✅ OCR Validation Results:', validation)
+        
+        if (validation.ocrConfidence) {
+          console.log(`📊 OCR Confidence: ${Math.round(validation.ocrConfidence)}%`)
+        }
+        
+        if (validation.matches) {
+          console.log('✅ Validated fields:', Object.keys(validation.matches))
+        }
+        
+        if (validation.warnings && validation.warnings.length > 0) {
+          console.warn('⚠️ Validation warnings:', validation.warnings)
+        }
+      }
 
       if (!uploadResponse.data.success) {
         throw new Error(uploadResponse.data.error || 'Document verification failed')
@@ -340,6 +358,7 @@ export default function BorrowersPage() {
 
       // Step 2: Generate identity ZK proof
       console.log('🔐 Generating identity ZK proof...')
+      toast.loading('Generating zero-knowledge proof...', { id: 'identity' })
 
       const zkResponse = await axios.post(`${BACKEND_URL}/api/identity/generate-proof`, {
         identityInputs: uploadResponse.data.zkInputs
@@ -368,10 +387,47 @@ export default function BorrowersPage() {
 
     } catch (error: any) {
       console.error('❌ Identity verification failed:', error)
-      toast.error(
-        'Verification failed: ' + (error.response?.data?.error || error.message),
-        { id: 'identity' }
-      )
+      
+      // Extract detailed error message from backend
+      const errorData = error.response?.data
+      let errorMessage = 'Verification failed'
+      
+      if (errorData?.error) {
+        errorMessage = errorData.error
+      } else if (errorData?.message) {
+        errorMessage = errorData.message
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      // Show detailed validation errors if available
+      if (errorData?.validation) {
+        console.error('📋 Validation errors:', errorData.validation)
+        
+        const validationErrors = errorData.validation.errors || []
+        const validationWarnings = errorData.validation.warnings || []
+        
+        if (validationErrors.length > 0) {
+          errorMessage += '\n\n❌ Validation Errors:\n' + validationErrors.map((e: string) => `• ${e}`).join('\n')
+        }
+        
+        if (validationWarnings.length > 0) {
+          errorMessage += '\n\n⚠️ Warnings:\n' + validationWarnings.map((w: string) => `• ${w}`).join('\n')
+        }
+      }
+      
+      // Special handling for document validation errors
+      if (errorMessage.includes('MISMATCH') || 
+          errorMessage.includes('validation failed') || 
+          errorMessage.includes('could not be read')) {
+        errorMessage += '\n\n💡 Tips:\n' +
+          '• Ensure document is clear and well-lit\n' +
+          '• Check that entered data matches document exactly\n' +
+          '• Use original document (not photocopy)\n' +
+          '• Supported formats: JPEG, PNG, PDF'
+      }
+      
+      toast.error(errorMessage, { id: 'identity', duration: 10000 })
     } finally {
       setIsVerifyingIdentity(false)
     }

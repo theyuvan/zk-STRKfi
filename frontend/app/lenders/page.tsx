@@ -580,6 +580,44 @@ export default function LendersPage() {
       const hoursOverdue = Math.floor((now.getTime() - deadline.getTime()) / (1000 * 60 * 60))
       const minutesOverdue = Math.floor((now.getTime() - deadline.getTime()) / (1000 * 60))
 
+      // ===== NEW: GET IDENTITY COMMITMENT FROM BACKEND =====
+      // The contract only stores activity_commitment, but we need identity_commitment for reveal
+      // Backend maps activity_commitment -> identity_commitment via JSON storage
+      console.log('🔍 Looking up identity commitment from activity commitment...')
+      toast.loading('Looking up borrower identity commitment...', { id: 'reveal' })
+      
+      let identity_commitment: string
+      try {
+        const identityLookupResponse = await axios.get(
+          `${BACKEND_URL}/api/loan/identity-by-activity/${borrowerCommitment}`
+        )
+        
+        if (!identityLookupResponse.data.success) {
+          toast.error(
+            'Borrower has not completed identity verification. Identity commitment not available.',
+            { id: 'reveal', duration: 8000 }
+          )
+          console.error('❌ Identity commitment not found:', identityLookupResponse.data.error)
+          return
+        }
+        
+        identity_commitment = identityLookupResponse.data.identity_commitment
+        console.log('✅ Found identity commitment:', identity_commitment.slice(0, 20) + '...')
+        console.log('📋 Commitment mapping:', {
+          activity_commitment: borrowerCommitment.slice(0, 20) + '...',
+          identity_commitment: identity_commitment.slice(0, 20) + '...',
+          wallet: identityLookupResponse.data.walletAddress
+        })
+        
+      } catch (lookupError: any) {
+        console.error('❌ Failed to lookup identity commitment:', lookupError)
+        toast.error(
+          'Failed to lookup identity commitment: ' + (lookupError.response?.data?.error || lookupError.message),
+          { id: 'reveal', duration: 8000 }
+        )
+        return
+      }
+
       // CRITICAL: Check actual on-chain status using provider.callContract (simpler than Contract class)
       console.log('🔍 Checking actual on-chain status...')
       toast.loading('Verifying loan status on blockchain...', { id: 'reveal' })
@@ -677,16 +715,19 @@ export default function LendersPage() {
       // Convert loan_id to u256
       const loanIdU256 = uint256.bnToUint256(BigInt(loanId))
 
-      // CRITICAL: Use EXACT same commitment as get_application call
-      // The backend provides the commitment in hex format (0x...)
-      // We must use it EXACTLY as the contract stored it
-      const commitmentNum = BigInt(borrowerCommitment)
+      // ===== CRITICAL: CONTRACT LIMITATION =====
+      // The contract stores applications with activity_commitment as the key
+      // The contract's reveal function does: app = applications.read((loan_id, borrower_commitment))
+      // So we MUST pass activity_commitment to the contract (so it can find the application)
+      // But we'll show the identity_commitment to the user in the UI
+      
+      const activityCommitmentNum = BigInt(borrowerCommitment) // This is from the application
       
       console.log('🔓 Calling reveal_borrower_identity on contract...')
       console.log('  Loan ID:', loanId)
       console.log('  Loan ID u256:', { low: loanIdU256.low.toString(), high: loanIdU256.high.toString() })
-      console.log('  Commitment (from backend):', borrowerCommitment)
-      console.log('  Commitment (as BigInt):', commitmentNum.toString())
+      console.log('  Activity Commitment (for contract):', borrowerCommitment.slice(0, 20) + '...')
+      console.log('  Identity Commitment (to show user):', identity_commitment.slice(0, 20) + '...')
       console.log('  Days Overdue:', daysOverdue)
       console.log('  Hours Overdue:', hoursOverdue)
       console.log('  Minutes Overdue:', minutesOverdue)
@@ -697,19 +738,22 @@ export default function LendersPage() {
       console.log('  calldata:', [
         loanIdU256.low.toString(),
         loanIdU256.high.toString(),
-        commitmentNum.toString()
+        activityCommitmentNum.toString()
       ])
+      console.log('  ⚠️ NOTE: Passing ACTIVITY commitment to contract (so it can find the application)')
+      console.log('  ⚠️ NOTE: Will show IDENTITY commitment to user in UI')
 
       toast.loading('Calling smart contract...', { id: 'reveal' })
 
-      // Call reveal_borrower_identity on-chain
+      // Call reveal_borrower_identity on-chain with ACTIVITY COMMITMENT
+      // (Contract needs this to look up the application)
       const revealTx = await starknet.account.execute({
         contractAddress: LOAN_ESCROW_ADDRESS,
         entrypoint: 'reveal_borrower_identity',
         calldata: [
           loanIdU256.low.toString(),
           loanIdU256.high.toString(),
-          commitmentNum.toString()
+          activityCommitmentNum.toString() // <-- Using ACTIVITY commitment for contract lookup
         ]
       })
       
@@ -724,8 +768,7 @@ export default function LendersPage() {
         `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000'}/api/loan/${loanId}/reveal/${borrowerCommitment}`
       )
       
-      // Show the revealed identity
-      const borrowerIdentity = revealResponse.data.commitment || borrowerCommitment
+      // Show BOTH commitments to the user
       const borrowerWallet = revealResponse.data.borrower || app.borrower
 
       const overdueText = daysOverdue > 0 
@@ -736,30 +779,35 @@ export default function LendersPage() {
 
       toast.success(
         `Identity revealed successfully!\n\n` +
-        `ZK Identity: ${borrowerIdentity.slice(0, 20)}...\n` +
-        `Wallet: ${borrowerWallet}\n` +
-        `Overdue by: ${overdueText}`,
-        { id: 'reveal', duration: 10000 }
+        `🔒 Identity Commitment: ${identity_commitment.slice(0, 16)}...\n` +
+        `📊 Activity Commitment: ${borrowerCommitment.slice(0, 16)}...\n` +
+        `📍 Wallet: ${borrowerWallet}\n` +
+        `⏰ Overdue: ${overdueText}`,
+        { id: 'reveal', duration: 12000 }
       )
 
       console.log('📋 Revealed Identity Details:')
-      console.log('  ZK Identity (Commitment):', borrowerIdentity)
-      console.log('  Wallet Address:', borrowerWallet)
-      console.log('  Overdue Duration:', overdueText)
-      console.log('  Transaction:', revealTx.transaction_hash)
+      console.log('  🔒 ZK Identity (Identity Commitment):', identity_commitment)
+      console.log('  📊 ZK Activity (Activity Commitment):', borrowerCommitment)
+      console.log('  📍 Wallet Address:', borrowerWallet)
+      console.log('  ⏰ Overdue Duration:', overdueText)
+      console.log('  📝 Transaction:', revealTx.transaction_hash)
       console.log('🔗 View on Voyager:', `https://sepolia.voyager.online/tx/${revealTx.transaction_hash}`)
 
       // Show detailed alert
       alert(
         `🔓 Borrower Identity Revealed!\n\n` +
-        `🔒 ZK Identity (Commitment): ${borrowerIdentity.slice(0, 20)}...${borrowerIdentity.slice(-16)}\n` +
+        `🔒 ZK Identity Commitment (Permanent): ${identity_commitment.slice(0, 20)}...${identity_commitment.slice(-16)}\n` +
+        `   (Decimal: ${BigInt(identity_commitment).toString()})\n\n` +
+        `📊 Activity Commitment (This Loan): ${borrowerCommitment.slice(0, 20)}...${borrowerCommitment.slice(-16)}\n\n` +
         `📍 Wallet Address: ${borrowerWallet}\n` +
         `📋 Loan ID: ${loanId}\n` +
         `⏰ Overdue by: ${overdueText}\n` +
         `📝 Transaction: ${revealTx.transaction_hash.slice(0, 10)}...\n\n` +
         `⚠️ The borrower failed to repay within the deadline.\n` +
-        `✅ Identity revealed on-chain via smart contract.\n` +
-        `💡 The ZK Identity Commitment is the borrower's permanent identity used for reputation tracking.`
+        `✅ Identity revealed on-chain via smart contract.\n\n` +
+        `💡 The Identity Commitment is the borrower's permanent identity for reputation tracking.\n` +
+        `💡 The Activity Commitment is specific to this loan application.`
       )
 
       // Reload applications to update UI

@@ -3,6 +3,7 @@ const router = express.Router();
 const logger = require('../utils/logger');
 const { RpcProvider, Contract, CallData, uint256, hash } = require('starknet');
 const commitmentCache = require('../services/commitmentCacheService'); // Import at top!
+const identityCommitmentStore = require('../services/identityCommitmentStore');
 
 // Contract addresses (update after deployment)
 const LOAN_ESCROW_ZK_ADDRESS = process.env.LOAN_ESCROW_ZK_ADDRESS || '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012';
@@ -1091,6 +1092,71 @@ router.get('/:loanId/reveal/:commitment', async (req, res) => {
   } catch (error) {
     logger.error('❌ [REVEAL] Error revealing borrower:', error);
     res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * NEW ENDPOINT: Get identity commitment by activity commitment
+ * This is used during identity reveal - the contract only stores activity_commitment,
+ * but we need identity_commitment for reveal.
+ * 
+ * Flow:
+ * 1. Lender gets application with activity_commitment from contract
+ * 2. Lender calls this endpoint with activity_commitment
+ * 3. Backend looks up which wallet has this activity_commitment
+ * 4. Backend returns the identity_commitment for that wallet
+ * 
+ * GET /api/loan/identity-by-activity/:activityCommitment
+ */
+router.get('/identity-by-activity/:activityCommitment', async (req, res) => {
+  try {
+    const { activityCommitment } = req.params;
+    
+    logger.info('🔍 [IDENTITY-LOOKUP] Looking up identity commitment...', {
+      activity: activityCommitment.slice(0, 20) + '...'
+    });
+
+    // Look up wallet and commitments from JSON store
+    const result = await identityCommitmentStore.findWalletByActivityCommitment(activityCommitment);
+
+    if (!result) {
+      logger.warn('⚠️ [IDENTITY-LOOKUP] No wallet found for activity commitment');
+      return res.status(404).json({
+        success: false,
+        error: 'No identity commitment found for this activity commitment. Borrower may not have completed identity verification.'
+      });
+    }
+
+    if (!result.identity_commitment) {
+      logger.warn('⚠️ [IDENTITY-LOOKUP] Wallet found but no identity commitment stored');
+      return res.status(404).json({
+        success: false,
+        error: 'Borrower has not completed identity verification. Identity commitment not available.',
+        walletAddress: result.walletAddress
+      });
+    }
+
+    logger.info('✅ [IDENTITY-LOOKUP] Found identity commitment', {
+      wallet: result.walletAddress.slice(0, 10) + '...',
+      identity: result.identity_commitment.slice(0, 20) + '...'
+    });
+
+    res.json({
+      success: true,
+      walletAddress: result.walletAddress,
+      identity_commitment: result.identity_commitment,
+      activity_commitment: result.activity_commitment,
+      created_at: result.created_at,
+      updated_at: result.updated_at,
+      message: 'Identity commitment found successfully'
+    });
+
+  } catch (error) {
+    logger.error('❌ [IDENTITY-LOOKUP] Error:', error);
+    res.status(500).json({
       success: false, 
       error: error.message 
     });
