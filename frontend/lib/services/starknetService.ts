@@ -325,8 +325,17 @@ export class StarkNetService {
   }
 }
 
-// Export singleton instance
-export const starknetService = new StarkNetService()
+// Lazy singleton instance - only initialize when accessed
+let _starknetServiceInstance: StarkNetService | null = null
+
+export const starknetService = new Proxy({} as StarkNetService, {
+  get(target, prop) {
+    if (!_starknetServiceInstance) {
+      _starknetServiceInstance = new StarkNetService()
+    }
+    return (_starknetServiceInstance as any)[prop]
+  }
+})
 
 // Default export for compatibility
 export default StarkNetService
