@@ -1,5 +1,8 @@
 'use client'
 
+// Force dynamic rendering - this page requires client-side wallet connection
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Wallet, Activity, Shield, FileText, Loader2, CheckCircle, XCircle, Upload, User, AlertCircle } from 'lucide-react'
