@@ -53,7 +53,7 @@ export class StarkNetService {
       nodeUrl: this.rpcUrl,
       retries: 3
     })
-    this.strkContract = new Contract(ERC20_ABI, STRK_TOKEN_ADDRESS, this.provider)
+    this.strkContract = new Contract({ abi: ERC20_ABI, address: STRK_TOKEN_ADDRESS, providerOrAccount: this.provider })
     this.erc20Abi = ERC20_ABI
   }
 
@@ -325,17 +325,8 @@ export class StarkNetService {
   }
 }
 
-// Lazy singleton instance - only initialize when accessed
-let _starknetServiceInstance: StarkNetService | null = null
-
-export const starknetService = new Proxy({} as StarkNetService, {
-  get(target, prop) {
-    if (!_starknetServiceInstance) {
-      _starknetServiceInstance = new StarkNetService()
-    }
-    return (_starknetServiceInstance as any)[prop]
-  }
-})
+// Export singleton instance
+export const starknetService = new StarkNetService()
 
 // Default export for compatibility
 export default StarkNetService

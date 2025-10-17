@@ -3,7 +3,7 @@
  * Handles StarkNet wallet connections and blockchain interactions
  */
 
-import { RpcProvider, Contract, CallData, uint256, num, hash } from 'starknet'
+import { RpcProvider, CallData, uint256 } from 'starknet'
 
 // Contract addresses from environment
 const LOAN_ESCROW_ZK_ADDRESS = process.env.NEXT_PUBLIC_LOAN_ESCROW_ZK_ADDRESS || 
@@ -127,13 +127,9 @@ const LOAN_ESCROW_ABI = [
 
 export class StarkNetService {
   private provider: RpcProvider
-  private strkContract: Contract
-  private escrowContract: Contract
 
   constructor() {
     this.provider = new RpcProvider({ nodeUrl: RPC_URL })
-    this.strkContract = new Contract(ERC20_ABI, STRK_TOKEN_ADDRESS, this.provider)
-    this.escrowContract = new Contract(LOAN_ESCROW_ABI, LOAN_ESCROW_ZK_ADDRESS, this.provider)
   }
 
   /**
@@ -149,26 +145,16 @@ export class StarkNetService {
     try {
       console.log('📊 Fetching STRK balance for:', walletAddress)
 
-      const result = await this.strkContract.balanceOf(walletAddress)
-      
-      let balance: bigint
-
-      if (result && typeof result.balance === 'bigint') {
-        balance = result.balance
-      } else if (result && result.balance && (result.balance.low !== undefined || result.balance.high !== undefined)) {
-        const balanceLow = BigInt(result.balance.low || 0)
-        const balanceHigh = BigInt(result.balance.high || 0)
-        balance = balanceLow + (balanceHigh << BigInt(128))
-      } else if (Array.isArray(result) && result.length >= 2) {
-        balance = BigInt(result[0] || 0) + (BigInt(result[1] || 0) << BigInt(128))
-      } else if (result && (result.low !== undefined || result.high !== undefined)) {
-        balance = BigInt(result.low || 0) + (BigInt(result.high || 0) << BigInt(128))
-      } else if (typeof result === 'bigint') {
-        balance = result
-      } else {
-        console.warn('⚠️ Unexpected balance structure, defaulting to 0')
-        balance = BigInt(0)
-      }
+      // Call balance directly via provider to avoid ABI parsing issues
+      const res: any = await this.provider.callContract({
+        contractAddress: STRK_TOKEN_ADDRESS,
+        entrypoint: 'balanceOf',
+        calldata: [walletAddress]
+      })
+      const arr: string[] = Array.isArray(res) ? res : (res.result ?? [])
+      const low = BigInt(arr[0] || 0)
+      const high = BigInt(arr[1] || 0)
+      const balance = low + (high << BigInt(128))
 
       const decimals = 18
       const balanceInStrk = Number(balance) / Math.pow(10, decimals)
@@ -193,8 +179,15 @@ export class StarkNetService {
    */
   async getLoanCount(): Promise<number> {
     try {
-      const result = await this.escrowContract.get_loan_count()
-      const count = typeof result === 'bigint' ? Number(result) : Number(result.count || 0)
+      const res: any = await this.provider.callContract({
+        contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+        entrypoint: 'get_loan_count',
+        calldata: []
+      })
+      const arr: string[] = Array.isArray(res) ? res : (res.result ?? [])
+      const low = BigInt(arr[0] || 0)
+      const high = BigInt(arr[1] || 0)
+      const count = Number(low + (high << BigInt(128)))
       return count
     } catch (error) {
       console.error('❌ Error fetching loan count:', error)
@@ -207,8 +200,13 @@ export class StarkNetService {
    */
   async getLoanDetails(loanId: number): Promise<any> {
     try {
-      const result = await this.escrowContract.get_loan_details(uint256.bnToUint256(loanId))
-      return result
+      const loanIdU256 = uint256.bnToUint256(loanId)
+      const res: any = await this.provider.callContract({
+        contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+        entrypoint: 'get_loan_details',
+        calldata: [loanIdU256.low.toString(), loanIdU256.high.toString()]
+      })
+      return Array.isArray(res) ? res : (res.result ?? res)
     } catch (error) {
       console.error('❌ Error fetching loan details:', error)
       throw error
@@ -220,11 +218,13 @@ export class StarkNetService {
    */
   async getApplication(loanId: number, commitment: string): Promise<any> {
     try {
-      const result = await this.escrowContract.get_application(
-        uint256.bnToUint256(loanId),
-        commitment
-      )
-      return result
+      const loanIdU256 = uint256.bnToUint256(loanId)
+      const res: any = await this.provider.callContract({
+        contractAddress: LOAN_ESCROW_ZK_ADDRESS,
+        entrypoint: 'get_application',
+        calldata: [loanIdU256.low.toString(), loanIdU256.high.toString(), commitment]
+      })
+      return Array.isArray(res) ? res : (res.result ?? res)
     } catch (error) {
       console.error('❌ Error fetching application:', error)
       throw error

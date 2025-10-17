@@ -1,8 +1,5 @@
 'use client'
 
-// Force dynamic rendering - this page requires client-side wallet connection
-export const dynamic = 'force-dynamic'
-
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Wallet, TrendingUp, DollarSign, Users, Calendar, Plus, Loader2, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
@@ -73,14 +70,14 @@ export default function LendersPage() {
       const wallet = await connectWallet()
       if (wallet.address) {
         setWalletAddress(wallet.address)
-        
+
         // Fetch balance
         const starknetService = new StarkNetService()
         const balanceData = await starknetService.fetchStrkBalance(wallet.address)
         setStrkBalance(balanceData.formatted)
-        
+
         toast.success('Wallet connected!')
-        
+
         // Note: Don't fetch stats/loans yet - wait for ZK verification
       }
     } catch (error) {
@@ -96,19 +93,19 @@ export default function LendersPage() {
     setLoadingActivity(true)
     try {
       console.log('📊 Fetching activity data for:', walletAddress)
-      
+
       // Import services dynamically
       const { starknetService } = await import('@/lib/services/starknetService')
       const { activityScoreCalculator } = await import('@/lib/services/activityScoreCalculator')
-      
+
       // Fetch activity metrics from blockchain
       const metrics = await starknetService.calculateActivityMetrics(walletAddress)
       console.log('📦 Activity metrics from blockchain:', metrics)
-      
+
       // Calculate activity score
       const scoreResult = activityScoreCalculator.calculateScore(metrics)
       console.log('🎯 Activity score calculated:', scoreResult.total)
-      
+
       // Format data for frontend
       const data = {
         score: scoreResult.total,
@@ -132,9 +129,9 @@ export default function LendersPage() {
         scoreBreakdown: scoreResult,
         dataSource: 'frontend-starknet-service'
       }
-      
+
       console.log('✅ Activity data formatted:', data)
-      
+
       setActivityData(data)
       toast.success(`Activity Score: ${data.score} | Total Volume: ${data.totalVolumeFormatted}`)
     } catch (error) {
@@ -150,10 +147,10 @@ export default function LendersPage() {
     setGeneratingProof(true)
     try {
       console.log('🔐 Generating ZK proof...')
-      
+
       // Import ZK proof service
       const { zkProofService } = await import('@/lib/services/zkProofService')
-      
+
       // Try to generate real ZK proof via backend
       let proofData
       try {
@@ -173,7 +170,7 @@ export default function LendersPage() {
         )
         // Silent fallback - no warning toast
       }
-      
+
       // Display proof details
       console.log('📊 ZK Proof Details:', {
         commitment: proofData.commitment.slice(0, 20) + '...',
@@ -182,11 +179,11 @@ export default function LendersPage() {
         activityScore: proofData.activityScore,
         threshold: proofData.threshold
       })
-      
+
       setZkProof(proofData)
       setIsVerified(true)
       toast.success(`ZK Proof generated! Score: ${proofData.activityScore}`)
-      
+
       // Now fetch lender data
       fetchLenderStats(walletAddress)
       fetchMyLoans(walletAddress)
@@ -204,7 +201,7 @@ export default function LendersPage() {
     try {
       // Fetch all loans from blockchain
       const allLoans = await loanApi.getAvailableLoans()
-      
+
       // Filter loans by this lender
       const lenderLoans = allLoans.filter((loan: any) => 
         loan.lender.toLowerCase() === address.toLowerCase()
@@ -252,7 +249,7 @@ export default function LendersPage() {
       const allLoans = await loanApi.getAvailableLoans()
       console.log('📊 Total loans from API:', allLoans.length)
       console.log('📋 ALL loans data:', JSON.stringify(allLoans, null, 2))
-      
+
       const lenderLoans = allLoans.filter((loan: any) => {
         const lenderAddr = loan.lender?.toLowerCase() || ''
         const myAddr = address.toLowerCase()
@@ -260,7 +257,7 @@ export default function LendersPage() {
         console.log(`Loan ${loan.loanId}: Comparing ${lenderAddr} === ${myAddr} = ${isMatch}`)
         return isMatch
       })
-      
+
       console.log('✅ Filtered loans for this lender:', lenderLoans.length)
       console.log('📋 Filtered loans data:', JSON.stringify(lenderLoans, null, 2))
       setMyLoans(lenderLoans)
@@ -315,7 +312,7 @@ export default function LendersPage() {
       const amountPerBorrower = Number.parseFloat(amount)
       const totalSlots = Number.parseInt(maxBorrowers)
       const totalAmount = amountPerBorrower * totalSlots
-      
+
       // Convert to wei (18 decimals for STRK)
       const amountPerBorrowerWei = Math.floor(amountPerBorrower * 1e18).toString()
       const totalAmountWei = Math.floor(totalAmount * 1e18).toString()
@@ -337,7 +334,7 @@ export default function LendersPage() {
       // Prepare approve transaction (approve escrow to spend TOTAL amount)
       const starknetService = new StarkNetService()
       const contractAddresses = starknetService.getContractAddresses()
-      
+
       const approveCall = starknetService.prepareTokenApproval(
         contractAddresses.loanEscrow,
         totalAmountWei  // Approve total amount (amount per borrower * total slots)
@@ -353,14 +350,14 @@ export default function LendersPage() {
       )
 
       console.log('🔄 Executing transactions (approve + create loan)...')
-      
+
       // Execute both transactions
       const result = await starknet.account.execute([approveCall, createLoanCall])
-      
+
       console.log('✅ Loan created! TX:', result.transaction_hash)
-      
+
       toast.success('Loan offer created successfully!')
-      
+
       // Reset form
       setAmount('')
       setMaxBorrowers('')
@@ -390,13 +387,13 @@ export default function LendersPage() {
       setLoadingApplications(true)
       setSelectedLoan(loanId)
       console.log('📬 Loading applications for loan:', loanId)
-      
+
       const response = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000'}/api/loan/${loanId}/applications`)
-      
+
       console.log('📦 Applications response:', response.data)
       const apps = response.data.applications || []
       console.log('✅ Loaded', apps.length, 'applications')
-      
+
       setApplications(apps)
     } catch (error) {
       console.error('❌ Failed to load applications:', error)
@@ -414,7 +411,7 @@ export default function LendersPage() {
     try {
       console.log('👍 Approving borrower for loan:', loanId)
       console.log('📝 Borrower commitment:', borrowerCommitment)
-      
+
       toast.loading('Approving borrower...', { id: 'approve' })
 
       // Get wallet connection
@@ -446,7 +443,7 @@ export default function LendersPage() {
 
       // Convert loan_id to u256
       const loanIdU256 = uint256.bnToUint256(BigInt(loanId))
-      
+
       // Convert commitment to felt252 (clean and truncate)
       const cleanHex = (hexStr: string) => {
         if (!hexStr) return '0'
@@ -467,7 +464,7 @@ export default function LendersPage() {
 
       // Call approve_borrower on-chain
       toast.loading('Submitting approval transaction...', { id: 'approve' })
-      
+
       const approveTx = await starknet.account.execute({
         contractAddress: LOAN_ESCROW_ADDRESS,
         entrypoint: 'approve_borrower',
@@ -477,12 +474,12 @@ export default function LendersPage() {
           commitmentNum.toString()
         ]
       })
-      
+
       console.log('⏳ Waiting for approval tx:', approveTx.transaction_hash)
       toast.loading('Waiting for confirmation...', { id: 'approve' })
-      
+
       await provider.waitForTransaction(approveTx.transaction_hash)
-      
+
       console.log('✅ Borrower approved on blockchain!')
 
       toast.success(
@@ -500,7 +497,7 @@ export default function LendersPage() {
 
     } catch (error: any) {
       console.error('❌ Approval failed:', error)
-      
+
       if (error.message?.includes('User abort')) {
         toast.error('Transaction rejected by user', { id: 'approve' })
       } else {
@@ -516,9 +513,9 @@ export default function LendersPage() {
   const revealBorrowerIdentity = async (loanId: string, borrowerCommitment: string) => {
     try {
       console.log('🔓 Revealing borrower identity for overdue loan:', loanId)
-      
+
       toast.loading('Revealing borrower identity...', { id: 'reveal' })
-      
+
       // Get wallet connection
       const starknet = (globalThis as any).starknet
       if (!starknet?.account) {
@@ -532,14 +529,14 @@ export default function LendersPage() {
 
       const LOAN_ESCROW_ADDRESS = process.env.NEXT_PUBLIC_LOAN_ESCROW_ZK_ADDRESS || 
         '0x06b058a0946bb36fa846e6a954da885fa20809f43a9e47038dc83b4041f7f012'
-      
+
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000'
 
       // First, check the application status from backend to confirm it's overdue
       const appResponse = await axios.get(
         `${BACKEND_URL}/api/loan/application/${loanId}/${borrowerCommitment}`
       )
-      
+
       const app = appResponse.data
       if (!app) {
         toast.error('Application not found', { id: 'reveal' })
@@ -561,13 +558,13 @@ export default function LendersPage() {
 
       const deadline = new Date(app.repaymentDeadline)
       const now = new Date()
-      
+
       console.log('📅 Deadline Check:')
       console.log('  Repayment Deadline:', deadline.toISOString())
       console.log('  Current Time:', now.toISOString())
       console.log('  Is Overdue:', now > deadline)
       console.log('  Time Difference (ms):', now.getTime() - deadline.getTime())
-      
+
       if (now <= deadline) {
         const minutesRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60))
         toast.error(
@@ -583,31 +580,60 @@ export default function LendersPage() {
       const hoursOverdue = Math.floor((now.getTime() - deadline.getTime()) / (1000 * 60 * 60))
       const minutesOverdue = Math.floor((now.getTime() - deadline.getTime()) / (1000 * 60))
 
-      // ===== USE ONLY ON-CHAIN ACTIVITY COMMITMENT =====
-      // The contract stores activity_commitment in the Application struct
-      // We will ONLY use this commitment - no JSON file lookup
-      console.log('� Using on-chain activity commitment:', borrowerCommitment.slice(0, 20) + '...')
-      console.log('⚠️ NOTE: Identity commitment not used - only activity commitment from blockchain')
+      // ===== NEW: GET IDENTITY COMMITMENT FROM BACKEND =====
+      // The contract only stores activity_commitment, but we need identity_commitment for reveal
+      // Backend maps activity_commitment -> identity_commitment via JSON storage
+      console.log('🔍 Looking up identity commitment from activity commitment...')
+      toast.loading('Looking up borrower identity commitment...', { id: 'reveal' })
       
-      const activityCommitmentNum = BigInt(borrowerCommitment) // This is from the on-chain application
-
+      let identity_commitment: string
+      try {
+        const identityLookupResponse = await axios.get(
+          `${BACKEND_URL}/api/loan/identity-by-activity/${borrowerCommitment}`
+        )
+        
+        if (!identityLookupResponse.data.success) {
+          toast.error(
+            'Borrower has not completed identity verification. Identity commitment not available.',
+            { id: 'reveal', duration: 8000 }
+          )
+          console.error('❌ Identity commitment not found:', identityLookupResponse.data.error)
+          return
+        }
+        
+        identity_commitment = identityLookupResponse.data.identity_commitment
+        console.log('✅ Found identity commitment:', identity_commitment.slice(0, 20) + '...')
+        console.log('📋 Commitment mapping:', {
+          activity_commitment: borrowerCommitment.slice(0, 20) + '...',
+          identity_commitment: identity_commitment.slice(0, 20) + '...',
+          wallet: identityLookupResponse.data.walletAddress
+        })
+        
+      } catch (lookupError: any) {
+        console.error('❌ Failed to lookup identity commitment:', lookupError)
+        toast.error(
+          'Failed to lookup identity commitment: ' + (lookupError.response?.data?.error || lookupError.message),
+          { id: 'reveal', duration: 8000 }
+        )
+        return
+      }
       // CRITICAL: Check actual on-chain status using provider.callContract (simpler than Contract class)
       console.log('🔍 Checking actual on-chain status...')
       toast.loading('Verifying loan status on blockchain...', { id: 'reveal' })
-      
+
       try {
         // Convert parameters for contract call
         const loanIdU256Temp = uint256.bnToUint256(BigInt(loanId))
-        
+
         // CRITICAL: Use EXACT same commitment processing as we'll use for reveal
         // Don't truncate or clean - use the full value from backend
         const commitmentNumTemp = BigInt(borrowerCommitment)
-        
+
         console.log('📞 Calling get_application with provider.callContract...')
         console.log('  loan_id:', loanId)
         console.log('  commitment (from backend):', borrowerCommitment)
         console.log('  commitment (as BigInt):', commitmentNumTemp.toString())
-        
+
         // Use provider.callContract - simpler, returns raw felt values
         const result = await provider.callContract({
           contractAddress: LOAN_ESCROW_ADDRESS,
@@ -618,7 +644,7 @@ export default function LendersPage() {
             commitmentNumTemp.toString()
           ]
         })
-        
+
         console.log('📦 Raw contract response:', result)
         console.log('📦 Response analysis:', {
           index0_borrower: result[0],
@@ -630,16 +656,16 @@ export default function LendersPage() {
           index6: result[6],
           index7: result[7]
         })
-        
+
         // Parse status - need to find correct index
         // Cairo tuple: (felt252, felt252, u256, u8, u64, u64, u64)
         // StarkNet returns u256 as single felt in some cases
         // Status (u8) should be a small number (0-3)
-        
+
         // Find the status by looking for a small number (0-3)
         let onChainStatus = -1
         let statusIndex = -1
-        
+
         for (let i = 0; i < result.length; i++) {
           const val = Number(result[i])
           if (val >= 0 && val <= 3) {
@@ -648,13 +674,13 @@ export default function LendersPage() {
             break
           }
         }
-        
+
         const statusNames = ['pending', 'approved', 'repaid', 'overdue']
         const statusName = statusNames[onChainStatus] || `unknown(${onChainStatus})`
-        
+
         console.log('🔍 On-chain status:', statusName, '(value:', onChainStatus, 'at index:', statusIndex, ')')
         console.log('🔍 Backend says:', app.status)
-        
+
         if (onChainStatus !== 1) { // 1 = approved
           toast.error(
             `❌ Cannot reveal: Loan status on blockchain is "${statusName}". Backend says "${app.status}" but they're out of sync!`,
@@ -668,17 +694,17 @@ export default function LendersPage() {
           })
           return
         }
-        
+
         console.log('✅ Contract status verified: approved')
         toast.success('Status verified on blockchain', { id: 'reveal' })
-        
+
         // CRITICAL: Even though status is "approved", the reveal function might require
         // the status to change to "overdue" (status=3) AFTER the deadline passes.
         // This is a common pattern: approve the loan, then after deadline, status becomes overdue.
         console.warn('⚠️ IMPORTANT: Status is "approved" but reveal might require status="overdue"')
         console.warn('⚠️ The contract may need to update status to "overdue" first')
         console.warn('⚠️ Possible solution: Check if there\'s an update_status function to call first')
-        
+
       } catch (contractCheckError: any) {
         console.warn('⚠️ Could not verify status on contract:', contractCheckError)
         toast.dismiss('reveal')
@@ -688,44 +714,60 @@ export default function LendersPage() {
       // Convert loan_id to u256
       const loanIdU256 = uint256.bnToUint256(BigInt(loanId))
 
-      // ===== SIMPLIFIED: ONLY USE ON-CHAIN ACTIVITY COMMITMENT =====
-      // The contract stores activity_commitment in the Application struct
-      // We pass this commitment to reveal_borrower_identity
-      // No identity_commitment lookup needed - everything is on-chain
+      // CRITICAL: Use EXACT same commitment as get_application call
+      // The backend provides the commitment in hex format (0x...)
+      // We must use it EXACTLY as the contract stored it
+      const commitmentNum = BigInt(borrowerCommitment)
+      // ===== CRITICAL: CONTRACT LIMITATION =====
+      // The contract stores applications with activity_commitment as the key
+      // The contract's reveal function does: app = applications.read((loan_id, borrower_commitment))
+      // So we MUST pass activity_commitment to the contract (so it can find the application)
+      // But we'll show the identity_commitment to the user in the UI
       
+      const activityCommitmentNum = BigInt(borrowerCommitment) // This is from the application
+
       console.log('🔓 Calling reveal_borrower_identity on contract...')
       console.log('  Loan ID:', loanId)
       console.log('  Loan ID u256:', { low: loanIdU256.low.toString(), high: loanIdU256.high.toString() })
-      console.log('  Activity Commitment (on-chain):', borrowerCommitment.slice(0, 20) + '...')
+      console.log('  Commitment (from backend):', borrowerCommitment)
+      console.log('  Commitment (as BigInt):', commitmentNum.toString())
+      console.log('  Activity Commitment (for contract):', borrowerCommitment.slice(0, 20) + '...')
+      console.log('  Identity Commitment (to show user):', identity_commitment.slice(0, 20) + '...')
       console.log('  Days Overdue:', daysOverdue)
       console.log('  Hours Overdue:', hoursOverdue)
       console.log('  Minutes Overdue:', minutesOverdue)
-      
+
       console.log('📤 REVEAL TRANSACTION CALLDATA:')
       console.log('  contractAddress:', LOAN_ESCROW_ADDRESS)
       console.log('  entrypoint:', 'reveal_borrower_identity')
       console.log('  calldata:', [
         loanIdU256.low.toString(),
         loanIdU256.high.toString(),
+        commitmentNum.toString(),
         activityCommitmentNum.toString()
       ])
+      console.log('  ⚠️ NOTE: Passing ACTIVITY commitment to contract (so it can find the application)')
+      console.log('  ⚠️ NOTE: Will show IDENTITY commitment to user in UI')
 
       toast.loading('Calling smart contract...', { id: 'reveal' })
 
+      // Call reveal_borrower_identity on-chain
       // Call reveal_borrower_identity on-chain with ACTIVITY COMMITMENT
+      // (Contract needs this to look up the application)
       const revealTx = await starknet.account.execute({
         contractAddress: LOAN_ESCROW_ADDRESS,
         entrypoint: 'reveal_borrower_identity',
         calldata: [
           loanIdU256.low.toString(),
           loanIdU256.high.toString(),
-          activityCommitmentNum.toString()
+          commitmentNum.toString(),
+          activityCommitmentNum.toString() // <-- Using ACTIVITY commitment for contract lookup
         ]
       })
-      
+
       console.log('⏳ Waiting for reveal tx:', revealTx.transaction_hash)
       toast.loading('Waiting for blockchain confirmation...', { id: 'reveal' })
-      
+
       await provider.waitForTransaction(revealTx.transaction_hash)
       console.log('✅ Identity revealed on blockchain!')
 
@@ -733,8 +775,10 @@ export default function LendersPage() {
       const revealResponse = await axios.get(
         `${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000'}/api/loan/${loanId}/reveal/${borrowerCommitment}`
       )
-      
-      // Show revealed borrower wallet
+
+      // Show the revealed identity
+      const borrowerIdentity = revealResponse.data.commitment || borrowerCommitment
+      // Show BOTH commitments to the user
       const borrowerWallet = revealResponse.data.borrower || app.borrower
 
       const overdueText = daysOverdue > 0 
@@ -745,40 +789,44 @@ export default function LendersPage() {
 
       toast.success(
         `Identity revealed successfully!\n\n` +
-        ` Activity Commitment: ${borrowerCommitment.slice(0, 16)}...\n` +
+        `🔒 Identity Commitment: ${identity_commitment.slice(0, 16)}...\n` +
+        `📊 Activity Commitment: ${borrowerCommitment.slice(0, 16)}...\n` +
         `📍 Wallet: ${borrowerWallet}\n` +
-        `⏰ Overdue: ${overdueText}\n` +
-        `💡 Data source: On-chain only`,
+        `⏰ Overdue: ${overdueText}`,
         { id: 'reveal', duration: 12000 }
       )
 
       console.log('📋 Revealed Identity Details:')
-      console.log('  � Activity Commitment (On-chain):', borrowerCommitment)
+      console.log('  ZK Identity (Commitment):', borrowerIdentity)
+      console.log('  Wallet Address:', borrowerWallet)
+      console.log('  Overdue Duration:', overdueText)
+      console.log('  Transaction:', revealTx.transaction_hash)
+      console.log('  🔒 ZK Identity (Identity Commitment):', identity_commitment)
+      console.log('  📊 ZK Activity (Activity Commitment):', borrowerCommitment)
       console.log('  📍 Wallet Address:', borrowerWallet)
       console.log('  ⏰ Overdue Duration:', overdueText)
       console.log('  📝 Transaction:', revealTx.transaction_hash)
       console.log('🔗 View on Voyager:', `https://sepolia.voyager.online/tx/${revealTx.transaction_hash}`)
 
-      // Show simplified alert (on-chain data only)
+      // Show detailed alert
       alert(
         `🔓 Borrower Identity Revealed!\n\n` +
-        `� Activity Commitment: ${borrowerCommitment.slice(0, 20)}...${borrowerCommitment.slice(-16)}\n` +
-        `   (Decimal: ${BigInt(borrowerCommitment).toString()})\n\n` +
+        `🔒 ZK Identity (Commitment): ${borrowerIdentity.slice(0, 20)}...${borrowerIdentity.slice(-16)}\n` +
+        `🔒 ZK Identity Commitment (Permanent): ${identity_commitment.slice(0, 20)}...${identity_commitment.slice(-16)}\n` +
+        `   (Decimal: ${BigInt(identity_commitment).toString()})\n\n` +
+        `📊 Activity Commitment (This Loan): ${borrowerCommitment.slice(0, 20)}...${borrowerCommitment.slice(-16)}\n\n` +
         `📍 Wallet Address: ${borrowerWallet}\n` +
         `📋 Loan ID: ${loanId}\n` +
         `⏰ Overdue by: ${overdueText}\n` +
         `📝 Transaction: ${revealTx.transaction_hash.slice(0, 10)}...\n\n` +
         `⚠️ The borrower failed to repay within the deadline.\n` +
         `✅ Identity revealed on-chain via smart contract.\n\n` +
-        `💡 All data retrieved from blockchain only - no off-chain storage.`
+        `💡 The Identity Commitment is the borrower's permanent identity for reputation tracking.\n` +
+        `💡 The Activity Commitment is specific to this loan application.`
       )
-
-      // Reload applications to update UI
-      await loadApplications(selectedLoan)
-      
     } catch (error: any) {
       console.error('❌ Failed to reveal identity:', error)
-      
+
       if (error.message?.includes('User abort')) {
         toast.error('Transaction rejected by user', { id: 'reveal' })
       } else {
@@ -794,7 +842,7 @@ export default function LendersPage() {
   return (
     <main className="bg-neutral-950 text-white min-h-screen pt-20">
       <Toaster position="top-right" />
-      
+
       {/* Header */}
       <section className="relative z-10 px-4 sm:px-6 lg:px-8 py-8 border-b border-white/10">
         <div className="max-w-7xl mx-auto">
@@ -810,7 +858,7 @@ export default function LendersPage() {
                 <p className="text-white/60 mt-1">Manage your loan portfolio</p>
               </div>
             </div>
-            
+
             {!walletAddress ? (
               <Button 
                 onClick={handleConnectWallet}
@@ -948,7 +996,7 @@ export default function LendersPage() {
                         <div className="text-white/50 text-xs">Block #{tx.blockNumber}</div>
                       </div>
                     ))}
-                    
+
                     {/* Received Transactions */}
                     {activityData.receivedTransactions?.transactions?.slice(0, 5).map((tx: any, idx: number) => (
                       <div key={`received-${idx}`} className="flex items-center justify-between p-3 bg-neutral-900/50 rounded-lg">
@@ -1015,7 +1063,7 @@ export default function LendersPage() {
                   )}
                 </Button>
               </div>
-              
+
               <RevealOnView>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   <Card className="bg-neutral-900/80 border-white/10 p-6">
@@ -1120,7 +1168,7 @@ export default function LendersPage() {
                   <Plus className="w-6 h-6 text-purple-500" />
                   Create Loan Offer
                 </h2>
-                
+
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <Label htmlFor="amount" className="text-white/90">Amount Per Borrower (STRK)</Label>
@@ -1253,19 +1301,19 @@ export default function LendersPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {myLoans.map((loan, index) => {
                     console.log(`Rendering loan ${index}:`, { loanId: loan.loanId, lender: loan.lender, loanAmount: loan.loanAmount, interestRate: loan.interestRate })
-                    
+
                     const loanAmountFormatted = formatStrkAmount(loan.loanAmount)
-                    
+
                     // Duration: Show in seconds
                     const repaymentSeconds = Number(loan.repaymentPeriod) || 0
                     const durationDisplay = `${repaymentSeconds.toLocaleString()} seconds`
-                    
+
                     // Interest rate: Format properly
                     const interestRateValue = Number(loan.interestRate) || 0
                     const interestRateDisplay = interestRateValue % 1 === 0 
                       ? interestRateValue.toFixed(0)  // Whole number: "10"
                       : interestRateValue.toFixed(2)  // Decimal: "10.50"
-                    
+
                     const slotsAvailable = (loan.totalSlots || 0) - (loan.filledSlots || 0)
                     const isFull = slotsAvailable <= 0
 
@@ -1437,7 +1485,7 @@ export default function LendersPage() {
                       const isOverdue = app.status === 'approved' && 
                                         app.repaymentDeadline && 
                                         new Date(app.repaymentDeadline) < new Date()
-                      
+
                       return (
                         <div 
                           key={index}
@@ -1594,4 +1642,3 @@ export default function LendersPage() {
     </main>
   )
 }
-
