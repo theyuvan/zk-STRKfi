@@ -62,7 +62,9 @@ class CommitmentCacheService {
    * @param {Array<string>} commitments - Array of commitment hashes
    */
   addCommitments(commitments) {
-    commitments.forEach(commitment => this.addCommitment(commitment));
+    for (const commitment of commitments) {
+      this.addCommitment(commitment);
+    }
   }
 
   /**
